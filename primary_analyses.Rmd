@@ -1,0 +1,1464 @@
+---
+title: "BABIES teach vs. learn analyses"
+author: "Lucy King"
+output: html_notebook
+---
+
+# Environment
+```{r}
+# Libraries
+library(tidyverse)
+library(ggsci)
+library(ggpubr)
+library(car)
+library(lme4)
+library(lmerTest)
+library(performance)
+library(effectsize)
+library(parameters)
+library(corrr)
+set.seed(123456)
+
+cbbPalette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+# Data
+data_home <- "~/Box/Mooddata_Coordinating/BABIES/Data/final_scored_data/"
+
+assignment_file <- paste0(
+  data_home, 
+  "lab_caregiving_behavior/free_play_intervention_assignment.csv"
+)
+
+caregiving_file_lf <- paste0(
+  data_home, 
+  "lab_caregiving_behavior/free_play_lf_10min_20210106.csv"
+)
+
+caregiving_file_wf <- paste0(
+  data_home, 
+  "lab_caregiving_behavior/free_play_wf_10min_20210106.csv"
+)
+
+free_play_master_file <- "~/Box/Mooddata_Coordinating/BABIES/Data/final_scored_data/lab_caregiving_behavior/raw_data/PCIRS_FreePlay_MASTER_20200508.xlsx"
+
+demographics_file <- paste0(
+  data_home,
+  "demographics/demo_6mo_cleaned_final.csv"
+)
+cesd_file <- paste0(
+  data_home,
+  "CESD/cesd_6mo_complete.csv"
+)
+shipley_file <- paste0(
+  data_home,
+  "shipley/shipley_6mo_final_20200208.csv"
+)
+crisys_file <- paste0(
+  data_home,
+  "CRISYS/crisys_scored_6mo_complete.csv"
+)
+
+```
+
+# Randomly pick control dyads to match sample size of largest treatment group
+Inclusion criteria: infant showed no significant fussiness during last two epochs of free play 
+```{r}
+all_fp_data <-
+  read_csv(caregiving_file_lf) %>% 
+  filter(!is.na(intrus_FP)) %>% 
+  distinct(ID) # plus 3 never coded
+
+possible_controls <- #
+  read_csv(caregiving_file_lf) %>% 
+  left_join(read_csv(assignment_file), by = "ID") %>% 
+  left_join(read_csv(demographics_file) %>% select(ID, behav_visit_date),  by = "ID") %>% 
+  filter(is.na(group)) %>% 
+  filter(!ID %in% c(126, 129, 131, 137, 1059, 1062, 1066, 1070, 1077)) # these IDs attempted intervention but were ultimately excluded (infant distress, diaper changing, did not understand instructions)
+
+possible_controls_n <- possible_controls %>% summarise(n_distinct(ID)) %>% pull() # plus 1 never coded
+
+possible_controls %>% 
+  filter(episode >= 4, negmood_FP > 2.5) %>% 
+  summarise(n_distinct(ID))
+```
+```{r}
+controls <-
+  possible_controls %>% 
+  filter(episode >= 4) %>% 
+  filter(negmood_FP < 3) %>% 
+  distinct(ID) %>% 
+  sample_n(size = 22) %>% 
+  mutate(group = "control")
+
+assignment <-
+  read_csv(assignment_file) %>% 
+  bind_rows(controls)
+```
+# Read in data
+Videos that can be use in presentations_________________________________________
+
+Learn group:
+Decreased by 1: 1057 (can share but not with non-scientific groups), 1063, (can share all), 1069 (can share all), 1111 (can share but not with non-scientific groups)
+Decreased by 1.5: 112 (can share all)
+Stayed the same: 122 (can share all), 1103 (can share all)
+
+```{r}
+d <-
+  read_csv(caregiving_file_lf) %>% 
+  left_join(assignment, by = "ID") %>% 
+  filter(!is.na(group)) %>% 
+  left_join(read_csv(demographics_file), by = "ID") %>% 
+  left_join(read_csv(cesd_file), by = "ID") %>% 
+  left_join(read_csv(shipley_file), by = "ID") %>% 
+  left_join(read_csv(crisys_file), by = "ID") %>% 
+  mutate(
+    male = as.factor(male),
+    group = as.factor(group),
+    episode_f = as.factor(episode),
+    college_or_higher = fct_collapse(
+      education_txt,
+      below = c(
+        "Trade/technical/vocational training",
+        "Associate degree",
+        "High school graduate/diploma/equivalent (i.e. GED)",
+        "Some college credit, no degree"
+      ),
+      college_or_higher = c(
+        "Bachelor's degree",
+        "Graduate degree"
+      )
+    ),
+    only_child = as.factor(
+      if_else(
+        ppl_in_home_allchild > 1,
+        "not", "only child"
+      )
+    ),
+    poc = if_else(
+      mom_race != "White" | mom_latinx == 1,
+      "POC", "White, Non-Hispanic"
+    )
+  ) 
+
+da <-
+  d %>% 
+  filter(episode >= 4)
+
+d_wf <-
+  read_csv(caregiving_file_wf) %>% 
+  left_join(assignment, by = "ID") %>% 
+  filter(!is.na(group)) %>% 
+  left_join(read_csv(demographics_file), by = "ID") %>% 
+  left_join(read_csv(cesd_file), by = "ID") %>% 
+  left_join(read_csv(shipley_file), by = "ID") %>% 
+  left_join(read_csv(crisys_file), by = "ID") %>% 
+  mutate(
+    male = as.factor(male),
+    group = as.factor(group),
+    college_or_higher = fct_collapse(
+      education_txt,
+      below = c(
+        "Trade/technical/vocational training",
+        "Associate degree",
+        "High school graduate/diploma/equivalent (i.e. GED)",
+        "Some college credit, no degree"
+      ),
+      college_or_higher = c(
+        "Bachelor's degree",
+        "Graduate degree"
+      )
+    ),
+    only_child = as.factor(
+      if_else(
+        ppl_in_home_allchild > 1,
+        "not", "only child"
+      )
+    ),
+    poc = if_else(
+      mom_race != "White" | mom_latinx == 1,
+      "POC", "White, Non-Hispanic"
+    )
+  )
+
+fp_master <-
+  readxl::read_xlsx(free_play_master_file) %>% 
+  mutate_at(
+    vars(Sens_R2:NegMood_R2, Sens_R1:NegMood_R1),
+    funs(as.double)
+  ) %>% 
+  rename_at(
+    vars(Sens_R2:NegMood_R2, Sens_R1:NegMood_R1),
+    funs(str_to_lower)
+  ) 
+
+```
+
+# Cell sizes
+```{r}
+d %>% 
+  distinct(ID, .keep_all = TRUE) %>% 
+  count(group)
+
+da %>% 
+  filter(group == "learn")
+```
+
+# Examine missingness
+```{r}
+d_wf %>% 
+  count(is.na(mom_age))
+
+d_wf %>% 
+  count(is.na(ppl_in_home_allchild))
+
+d_wf %>% 
+  count(is.na(education))
+
+d_wf %>% 
+  count(group, is.na(shipley_6mo_total))
+
+d_wf %>% 
+  count(group, is.na(cesd_total))
+
+d_wf %>% 
+  count(group, is.na(crisys_total))
+```
+
+# Descriptive statistics
+
+## Sample characteristics table
+```{r}
+d_sample_means <-
+  d_wf %>% 
+  group_by(group) %>% 
+  summarise_at(
+    vars(
+      age_behav,
+      mom_age,
+      income_needs,
+      cesd_total,
+      crisys_total,
+
+    ),
+    funs(mean), na.rm = TRUE
+  ) %>% 
+  gather(variable, mean, -group)
+
+d_sample_sds <-
+  d_wf %>% 
+  group_by(group) %>% 
+  summarise_at(
+    vars(
+      age_behav,
+      mom_age,
+      income_needs,
+      cesd_total,
+      crisys_total
+    ),
+    funs(sd), na.rm = TRUE
+  ) %>% 
+  gather(variable, sd, -group)
+
+d_sample_mins <-
+  d_wf %>% 
+  group_by(group) %>% 
+  summarise_at(
+    vars(
+      age_behav,
+      mom_age,
+      income_needs,
+      cesd_total,
+      crisys_total
+    ),
+    funs(min), na.rm = TRUE
+  ) %>% 
+  gather(variable, min, -group)
+
+d_sample_maxs <-
+  d_wf %>% 
+  group_by(group) %>% 
+  summarise_at(
+    vars(
+      age_behav,
+      mom_age,
+      income_needs,
+      cesd_total,
+      crisys_total,
+    ),
+    funs(max), na.rm = TRUE
+  ) %>% 
+  gather(variable, max, -group)
+
+d_sample_means %>% 
+  left_join(d_sample_sds, by = c("group", "variable")) %>% 
+  left_join(d_sample_mins, by = c("group", "variable"))  %>% 
+  left_join(d_sample_maxs, by = c("group", "variable")) %>% 
+  pivot_wider(
+    names_from = group,
+    values_from = mean:max
+  )  %>% 
+  mutate_at(
+    vars(mean_control:max_teach),
+    funs(round(., 2))
+  ) %>% 
+  mutate(
+    mean_control = paste(mean_control, sd_control, sep = ", "),
+    mean_teach = paste(mean_teach, sd_teach, sep = ", "),
+    mean_learn = paste(mean_learn, sd_learn, sep = ", ")
+  )
+```
+
+```{r}
+d_wf %>% 
+  count(group, college_or_higher) %>% 
+  pivot_wider(
+    names_from = group,
+    values_from = n
+  )
+```
+
+```{r}
+d_wf %>% 
+  count(group, mom_race) %>% 
+  arrange(group, desc(n)) %>% 
+  pivot_wider(
+    names_from = group,
+    values_from = n
+  )
+```
+
+```{r}
+d_wf %>% 
+  count(group, mom_latinx) %>% 
+  pivot_wider(
+    names_from = group,
+    values_from = n
+  )
+```
+
+```{r}
+d_wf %>% 
+  count(group, male) %>% 
+  pivot_wider(
+    names_from = group,
+    values_from = n
+  )
+```
+
+```{r}
+d_wf %>% 
+  count(group, only_child) %>% 
+  pivot_wider(
+    names_from = group,
+    values_from = n
+  )
+```
+
+## Reliability
+
+### Covariates
+```{r}
+d_wf %>% 
+  dplyr::select(
+    cesd_1:cesd_20
+  ) %>% 
+  psych::alpha()
+
+d_wf %>% 
+  dplyr::select(
+    crisys_1:crisys_68
+  ) %>% 
+  psych::alpha()
+```
+
+### Caregiving behavior
+```{r}
+#intrusiveness
+fp_master %>%
+  filter(Episode < 4) %>% 
+  dplyr::select(
+    intrus_r1,
+    intrus_r2
+  ) %>% 
+  na.omit() %>% 
+  psych::ICC()
+```
+
+```{r}
+#sensitivity
+fp_master %>%
+  filter(Episode < 4) %>% 
+  dplyr::select(
+    sens_r1,
+    sens_r2
+  ) %>% 
+  na.omit() %>% 
+  psych::ICC()
+```
+
+```{r}
+#stimulation
+fp_master %>%
+  filter(Episode < 4) %>% 
+  dplyr::select(
+    stim_r1,
+    stim_r2
+  ) %>% 
+  na.omit() %>% 
+  psych::ICC()
+```
+```{r}
+#positive regard
+fp_master %>%
+  filter(Episode < 4) %>% 
+  dplyr::select(
+    posreg_r1,
+    posreg_r2
+  ) %>% 
+  na.omit() %>% 
+  psych::ICC()
+```
+
+```{r}
+#negative regard
+fp_master %>%
+  filter(Episode < 4) %>% 
+  dplyr::select(
+    negreg_r1,
+    negreg_r2
+  ) %>% 
+  na.omit() %>% 
+  psych::ICC()
+```
+
+```{r}
+#detachment
+fp_master %>%
+  filter(Episode < 4) %>% 
+  dplyr::select(
+    detach_r1,
+    detach_r2
+  ) %>% 
+  na.omit() %>% 
+  psych::ICC()
+```
+## Distributions of caregiving behaviors
+```{r}
+da %>% 
+  dplyr::select(
+    group,
+    episode_f,
+    Intrusiveness = intrus_FP,
+    Sensitivity = sens_FP,
+    `Cog. stimulation` = stim_FP,
+    `Positive regard` = posreg_FP,
+    `Negative regard` = negreg_FP,
+    Detachment = detach_FP
+  ) %>% 
+  mutate(
+     episode_f = recode_factor(
+      episode_f,
+      "4" = "Time 1",
+      "5" = "Time 2"
+    ),
+    group = recode_factor(
+      group,
+      "control" = "Control",
+      "teach" = "Teach",
+      "learn" = "Learn"
+    )
+  ) %>% 
+  gather(
+    key, 
+    value,
+    Intrusiveness:Detachment
+  ) %>% 
+  mutate(
+    key = factor(
+      key,
+      levels = c(
+        "Intrusiveness",
+        "Sensitivity",
+        "Cog. stimulation",
+        "Positive regard",
+        "Negative regard",
+        "Detachment"
+      )
+    )
+  ) %>% 
+  ggplot(aes(value, fill = group)) +
+  geom_density(alpha = 1/2) +
+  scale_fill_manual(values = cbbPalette) +
+  theme_pubr() +
+  theme(
+    strip.text = element_text(size = 16),
+    axis.title.y = element_text(size = 20),
+    axis.title.x = element_text(size = 20),
+    axis.text.y = element_text(size = 16),
+    axis.text.x = element_text(size = 16),
+    legend.title = element_text(size = 18),
+    legend.text = element_text(size = 16),
+    legend.position = "bottom"
+  ) +
+  labs(
+    x = NULL,
+    fill = "Group"
+  ) +
+  facet_grid(key~episode_f, scales = "free")
+
+
+ggsave(
+  "~/Box/lucy_king_files/BABIES/teach_learn/figures/group_caregiving_density_plots.png",
+  dpi = 600,
+  width = 7,
+  height = 12
+)
+```
+
+## Examine matching across groups
+Variables examined: age, income-to-needs ratio, education, person of color, number of children, depressive symptoms, infant sex
+
+### Distributions for continuous covariates
+```{r}
+d_wf %>% 
+  dplyr::select(
+    group,
+    `Infant age (months)` = age_behav,
+    `Maternal age (years)` = mom_age,
+    `Income-to-needs ratio` = income_needs,
+    `Maternal depressive symptoms` = cesd_total,
+    `Maternal recent life stress` = crisys_total
+  ) %>% 
+  gather(
+    key, 
+    value,
+    -group
+  ) %>% 
+  mutate(
+    group = recode_factor(
+      group,
+      "control" = "Control",
+      "teach" = "Teach",
+      "learn" = "Learn"
+    )
+  ) %>% 
+  ggplot(aes(value, fill = group)) +
+  geom_density(alpha = 1/2) +
+  scale_fill_manual(values = cbbPalette) +
+  theme_pubr() +
+  theme(
+    strip.text = element_text(size = 16),
+    axis.title.y = element_text(size = 20),
+    axis.title.x = element_text(size = 20),
+    axis.text.y = element_text(size = 16),
+    axis.text.x = element_text(size = 16),
+    legend.title = element_text(size = 18),
+    legend.text = element_text(size = 16),
+    legend.position = "bottom"
+  ) +
+  labs(
+    x = NULL,
+    fill = "Group"
+  ) +
+  facet_wrap(.~key, scales = "free")
+
+
+ggsave(
+  "~/Box/lucy_king_files/BABIES/teach_learn/figures/group_matching_density_plots.png",
+  dpi = 600,
+  width = 12,
+  height = 7
+)
+```
+
+### Test differences
+```{r}
+chisq.test(d_wf$college_or_higher, d_wf$group) 
+chisq.test(d_wf$poc, d_wf$group) 
+chisq.test(d_wf$male, d_wf$group) 
+chisq.test(d_wf$only_child, d_wf$group) 
+chisq.test(d_wf$mom_latinx, d_wf$group) 
+
+Anova(lm(mom_age ~ group, data = d_wf), type = 3) # marginal
+Anova(lm(income_needs ~ group, data = d_wf), type = 3) 
+Anova(lm(cesd_total ~ group, data = d_wf), type = 3) 
+Anova(lm(crisys_total ~ group, data = d_wf), type = 3)
+Anova(lm(age_behav ~ group, data = d_wf), type = 3)
+```
+
+# Test pre-registered hypotheses
+We hypothesize that an instruction delivered after epoch 4 regarding the parent’s goal for epoch 5 will result in a change in maternal intrusiveness (relative to a control group with no instruction), such that, compared to epoch 4, a “teach” goal will result in increased intrusiveness during epoch 5 whereas a “learn” goal will result in decreased intrusiveness during epoch 5. We hypothesize no change in intrusiveness from epoch 4 to epoch 5 for the control (no instruction) group. Thus, we hypothesize that time (epoch 4, epoch 5) and group (control, teach, learn) will interact to explain variation in maternal intrusiveness.
+
+## Dummy-code episode and group
+```{r}
+da <-
+  da %>% 
+  mutate(
+    episode_f = as.factor(episode),
+    group = as.factor(group)
+  )
+```
+
+## Omnibus interaction effect with control group as baseline
+```{r}
+contrasts(da$group) = cbind( # control group is baseline
+  "learn" = c(0, 1, 0),
+  "teach" = c(0, 0, 1)
+) 
+contrasts(da$episode_f) # pre-treatment is baseline
+
+mlm_h_c <-
+  lmer(
+    intrus_FP ~
+      group * episode_f + (1|ID),
+    data = da
+  )
+
+anova(mlm_h_c)
+
+model_parameters(
+  mlm_h_c, 
+  standardize = "refit",
+  df_method = "satterthwaite"
+)
+
+performance(mlm_h_c)
+```
+
+## Simple effects
+
+## learn group as baseline
+```{r}
+contrasts(da$group) = cbind( # learn group is baseline
+  "control" = c(1, 0, 0),
+  "teach" = c(0, 0, 1)
+)
+
+mlm_h_l <-
+  lmer(
+    intrus_FP ~
+      group * episode_f + (1|ID),
+    data = da
+  )
+summary(mlm_h_l)
+
+parameters(
+  mlm_h_l, 
+  standardize = "refit",
+  df_method = "satterthwaite"
+)
+```
+
+## teach group as baseline
+```{r}
+contrasts(da$group) = cbind( # teach group is baseline
+  "control" = c(1, 0, 0),
+  "learn" = c(0, 1, 0)
+)
+
+mlm_h_t <-
+  lmer(
+    scale(intrus_FP) ~
+      group * episode_f + (1|ID),
+    data = da
+  )
+
+summary(mlm_h_t)
+
+parameters(
+  mlm_h_t, 
+  standardize = "refit",
+  df_method = "satterthwaite"
+)
+
+```
+
+Supporting our hypothesis, change in intrusiveness depended on group assignment. For the control group, there was no change in intrusiveness. For the learn group, there was a non-significant decrease in intrusiveness. For the teach group, there was a significant increase in intrusiveness.
+
+## Visualize zero-order effects 
+```{r}
+da_summary <-
+  da %>% 
+  mutate(
+    episode_f = recode_factor(
+      episode_f,
+      "4" = "Time 1",
+      "5" = "Time 2"
+    )
+  ) %>% 
+  group_by(group, episode_f) %>% 
+  summarise(
+    n = n(),
+    Intrusiveness = mean(intrus_FP),
+    intrus_sd = sd(intrus_FP),
+    intrus_se = intrus_sd / sqrt(n),
+    cog_stim = mean(stim_FP, na.rm = TRUE),
+    cog_stim_sd = sd(stim_FP, na.rm = TRUE),
+    cog_stim_se = cog_stim_sd / sqrt(n),
+    posreg = mean(posreg_FP),
+    posreg_sd = sd(posreg_FP),
+    posreg_se = posreg_sd / sqrt(n)
+  )
+```
+
+```{r}
+da %>% 
+  mutate(
+    episode_f = recode_factor(
+      episode_f,
+      "4" = "Baseline",
+      "5" = "Post-intervention"
+    )
+  ) %>% 
+  ggplot(aes(episode_f, intrus_FP, fill = group)) +
+  geom_boxplot() +
+  scale_fill_manual(values = cbbPalette) +
+  theme_pubr() +
+  theme(
+    strip.text = element_text(size = 16),
+    axis.title.y = element_text(size = 20),
+    axis.title.x = element_text(size = 20),
+    axis.text.y = element_text(size = 16),
+    axis.text.x = element_text(size = 16),
+    legend.title = element_text(size = 18),
+    legend.text = element_text(size = 16),
+    legend.position = "bottom"
+  ) +
+  labs(
+    x = NULL,
+    y = "Maternal intrusiveness",
+    fill = "Intervention group"
+  )
+
+ggsave(
+  "~/Box/lucy_king_files/BABIES/teach_learn/figures/hypothesis_boxplot.png",
+  dpi = 600,
+  width = 7,
+  height = 5
+)
+
+```
+
+```{r}
+gg_summary_p <- 
+  da_summary %>% 
+  mutate(
+    group = recode_factor(
+      group,
+      "control" = "Control",
+      "teach" = "Teach",
+      "learn" = "Learn"
+    )
+  ) %>% 
+  ggplot(aes(episode_f, Intrusiveness, color = group)) 
+
+
+gg_summary_p +
+  geom_pointrange(
+    aes(ymin = Intrusiveness - intrus_se, ymax = Intrusiveness + intrus_se),
+    size = 1.25
+  ) +
+  geom_line(aes(group = group), size = 2) +
+  scale_colour_manual(values=cbbPalette) +
+  scale_y_continuous(breaks = seq.int(1, 7, .5), limits = c(1, 4)) +
+  theme_pubr() +
+  theme(
+    strip.text = element_text(size = 16),
+    axis.title.y = element_text(size = 20),
+    axis.title.x = element_text(size = 20),
+    axis.text.y = element_text(size = 16),
+    axis.text.x = element_text(size = 16),
+    legend.title = element_text(size = 18),
+    legend.text = element_text(size = 16),
+    legend.position = "bottom"
+  ) +
+  labs(
+    x = NULL,
+    y = "Maternal intrusiveness",
+    color = NULL
+  )
+
+ggsave(
+  "~/Box/lucy_king_files/BABIES/teach_learn/figures/hypothesis_lineplot.png",
+  dpi = 600,
+  width = 6,
+  height = 5
+)
+```
+
+## N (%) increased, descreased, etc. 
+```{r}
+intrus_diff <-
+  da %>% 
+  select(ID, group, episode, intrus_FP) %>% 
+  pivot_wider(
+    names_from = episode,
+    values_from = intrus_FP
+  ) %>% 
+  mutate(
+    intrus_diff = `5` - `4`, 
+    increased = intrus_diff > 0, 
+    decreased = intrus_diff < 0,
+    stable = intrus_diff == 0
+  ) 
+
+intrus_diff %>% 
+  count(group, increased) %>% 
+  group_by(group) %>% 
+  mutate(per = n / sum(n))
+
+intrus_diff %>% 
+  filter(group == "learn", decreased == TRUE)
+```
+
+# Additional analyses
+
+## Covarying for infant sex and only child
+
+```{r}
+da <-
+  da %>% 
+  mutate(
+    male = as.factor(male)
+  )
+```
+
+```{r}
+contrasts(da$group) = cbind( # control group is baseline
+  "learn" = c(0, 1, 0),
+  "teach" = c(0, 0, 1)
+) 
+contrasts(da$male) = c(-.5, .5) # effect code sex
+
+mlm_h_c_planned_wf <-
+  lmer(
+    intrus_FP ~
+      group * episode_f + (1|ID) +
+      only_child +
+      male,
+    data = da
+  )
+
+anova(mlm_h_c_planned_wf)
+parameters(mlm_h_c_planned_wf, standardize = "refit")
+```
+
+## Using all free play data
+
+```{r}
+d <-
+  d %>% 
+  mutate(
+    group = as.factor(group),
+    male = as.factor(male),
+    episode_pc = as.factor(
+      case_when(
+        episode == 1 ~ 0,
+        episode == 2 ~ 0,
+        episode == 3 ~ 0,
+        episode == 4 ~ 0,
+        episode == 5 ~ 1
+      )
+    )
+  )
+```
+
+## Omnibus interaction effect with control group as baseline
+```{r}
+contrasts(d$group) = cbind( # control group is baseline
+  "learn" = c(0, 1, 0),
+  "teach" = c(0, 0, 1)
+) 
+contrasts(d$episode_pc)
+
+mlm_h_c_all <-
+  lmer(
+    intrus_FP ~
+      group * episode_pc + (1|ID),
+    data = d
+  )
+anova(mlm_h_c_all)
+parameters(mlm_h_c_all)
+performance(mlm_h_c_all)
+```
+## learn group as baseline
+```{r}
+contrasts(d$group) = cbind( # learn group is baseline
+  "control" = c(1, 0, 0),
+  "teach" = c(0, 0, 1)
+)
+
+mlm_h_l_all <-
+  lmer(
+    intrus_FP ~
+      group * episode_pc + (1|ID),
+    data = d
+  )
+summary(mlm_h_l_all)
+parameters(mlm_h_l_all)
+```
+
+## teach group as baseline
+```{r}
+contrasts(d$group) = cbind( # teach group is baseline
+  "control" = c(1, 0, 0),
+  "learn" = c(0, 1, 0)
+)
+
+mlm_h_t_all <-
+  lmer(
+    intrus_FP ~
+      group * episode_pc + (1|ID),
+    data = d
+  )
+parameters(mlm_h_t_all)
+```
+
+## Other caregiving behaviors
+
+### Correlations
+```{r}
+da_time_1 <-
+  da %>% 
+  filter(episode == "4")
+
+da_time_2 <-
+  da %>% 
+  filter(episode == "5")
+
+da_time_1 %>% 
+  select(stim_FP, education, income_needs) %>% 
+  correlate() %>% 
+  shave(upper = FALSE) %>% 
+  fashion() 
+
+da_time_2 %>% 
+  select(stim_FP, education, income_needs) %>% 
+  correlate() %>% 
+  shave(upper = FALSE) %>% 
+  fashion()
+```
+
+### Sensitivity
+```{r}
+contrasts(da$group) = cbind( # control group is baseline
+  "learn" = c(0, 1, 0),
+  "teach" = c(0, 0, 1) 
+)
+contrasts(da$episode_f) # pre-treatment is baseline
+
+mlm_sens_c <-
+  lmer(
+    sens_FP ~
+      group * episode + (1|ID),
+    data = da
+  )
+
+anova(mlm_sens_c)
+parameters(mlm_sens_c)
+```
+
+### Warmth
+```{r}
+contrasts(da$group) = cbind( # control group is baseline
+  "learn" = c(0, 1, 0),
+  "teach" = c(0, 0, 1) 
+)
+
+mlm_posreg_c <-
+  lmer(
+    posreg_FP ~
+      group * episode + (1|ID),
+    data = da
+  )
+
+anova(mlm_posreg_c)
+parameters(mlm_posreg_c, standardize = "refit")
+performance(mlm_posreg_c)
+```
+
+```{r}
+contrasts(da$group) = cbind( # learn group is baseline
+  "control" = c(1, 0, 0),
+  "teach" = c(0, 0, 1) 
+)
+
+mlm_posreg_l <-
+  lmer(
+    posreg_FP ~
+      group * episode + (1|ID),
+    data = da
+  )
+
+parameters(mlm_posreg_l, standardize = "refit")
+```
+
+```{r}
+contrasts(da$group) = cbind( # teach group is baseline
+  "control" = c(1, 0, 0),
+  "learn" = c(0, 1, 0) 
+)
+
+mlm_posreg_t <-
+  lmer(
+    posreg_FP ~
+      group * episode + (1|ID),
+    data = da
+  )
+
+parameters(mlm_posreg_t, standardize = "refit")
+```
+
+#### Visualize
+```{r}
+gg_summary_p_posreg <- 
+  da_summary %>% 
+  mutate(
+    group = recode_factor(
+      group,
+      "control" = "Control",
+      "teach" = "Teach",
+      "learn" = "Learn"
+    )
+  ) %>% 
+  ggplot(aes(episode_f, posreg, color = group)) 
+
+
+gg_summary_p_posreg +
+  geom_pointrange(
+    aes(ymin = posreg - posreg_se, ymax = posreg + posreg_se),
+    size = .75
+  ) +
+  geom_line(aes(group = group), size = 2) +
+  scale_colour_manual(values=cbbPalette) +
+  scale_y_continuous(breaks = seq.int(1, 7, .5), limits = c(1, 6)) +
+  theme_pubr() +
+  theme(
+    strip.text = element_text(size = 16),
+    axis.title.y = element_text(size = 20),
+    axis.title.x = element_text(size = 20),
+    axis.text.y = element_text(size = 16),
+    axis.text.x = element_text(size = 16),
+    legend.title = element_text(size = 18),
+    legend.text = element_text(size = 16),
+    legend.position = "bottom"
+  ) +
+  labs(
+    x = NULL,
+    y = "Maternal positive regard/warmth",
+    color = NULL
+  )
+
+ggsave(
+  "~/Box/lucy_king_files/BABIES/teach_learn/figures/lineplot_posreg.png",
+  dpi = 600,
+  width = 6,
+  height = 5
+)
+```
+
+
+### Cognitive stimulation
+```{r}
+contrasts(da$group) = cbind( # control group is baseline
+  "learn" = c(0, 1, 0),
+  "teach" = c(0, 0, 1) 
+)
+
+mlm_stim_c <-
+  lmer(
+    stim_FP ~
+      group * episode + (1|ID),
+    data = da
+  )
+
+anova(mlm_stim_c)
+parameters(mlm_stim_c, standardize = "refit")
+performance(mlm_stim_c)
+```
+
+```{r}
+contrasts(da$group) = cbind( # learn group is baseline
+  "control" = c(1, 0, 0),
+  "teach" = c(0, 0, 1) 
+)
+
+mlm_stim_l <-
+  lmer(
+    stim_FP ~
+      group * episode + (1|ID),
+    data = da
+  )
+
+parameters(mlm_stim_l, standardize = "refit")
+```
+
+```{r}
+contrasts(da$group) = cbind( # teach group is baseline
+  "control" = c(1, 0, 0),
+  "learn" = c(0, 1, 0) 
+)
+
+mlm_stim_t <-
+  lmer(
+    stim_FP ~
+      group * episode + (1|ID),
+    data = da
+  )
+
+parameters(mlm_stim_t)
+```
+
+#### Visualize
+```{r}
+gg_summary_p_stim <- 
+  da_summary %>% 
+  mutate(
+    group = recode_factor(
+      group,
+      "control" = "Control",
+      "teach" = "Teach",
+      "learn" = "Learn"
+    )
+  ) %>% 
+  ggplot(aes(episode_f, cog_stim, color = group)) 
+
+
+gg_summary_p_stim +
+  geom_pointrange(
+    aes(ymin = cog_stim - cog_stim_se, ymax = cog_stim + cog_stim_se),
+    size = .75
+  ) +
+  geom_line(aes(group = group), size = 2) +
+  scale_colour_manual(values=cbbPalette) +
+  scale_y_continuous(breaks = seq.int(1, 7, .5), limits = c(1, 5)) +
+  theme_pubr() +
+  theme(
+    strip.text = element_text(size = 16),
+    axis.title.y = element_text(size = 20),
+    axis.title.x = element_text(size = 20),
+    axis.text.y = element_text(size = 16),
+    axis.text.x = element_text(size = 16),
+    legend.title = element_text(size = 18),
+    legend.text = element_text(size = 16),
+    legend.position = "bottom"
+  ) +
+  labs(
+    x = NULL,
+    y = "Maternal cognitive stimulation",
+    color = NULL
+  )
+
+ggsave(
+  "~/Box/lucy_king_files/BABIES/teach_learn/figures/lineplot_stim.png",
+  dpi = 600,
+  width = 6,
+  height = 5
+)
+```
+
+
+### Negative Regard
+```{r}
+contrasts(da$group) = cbind( # control group is baseline
+  "learn" = c(0, 1, 0),
+  "teach" = c(0, 0, 1) 
+)
+
+mlm_negreg_c <-
+  lmer(
+    negreg_FP ~
+      group * episode + (1|ID),
+    data = da
+  )
+
+anova(mlm_negreg_c)
+```
+
+### Detachment
+```{r}
+contrasts(da$group) = cbind( # control group is baseline
+  "learn" = c(0, 1, 0),
+  "teach" = c(0, 0, 1) 
+)
+
+mlm_detach_c <-
+  lmer(
+    detach_FP ~
+      group * episode + (1|ID),
+    data = da
+  )
+
+anova(mlm_detach_c)
+```
+### Infant negative mood
+```{r}
+contrasts(da$group) = cbind( # control group is baseline
+  "learn" = c(0, 1, 0),
+  "teach" = c(0, 0, 1) 
+)
+
+mlm_negmood_c <-
+  lmer(
+    negmood_FP ~
+      group * episode + (1|ID),
+    data = da
+  )
+
+anova(mlm_negmood_c)
+```
+
+### Infant positive mood
+```{r}
+contrasts(da$group) = cbind( # control group is baseline
+  "learn" = c(0, 1, 0),
+  "teach" = c(0, 0, 1) 
+)
+
+mlm_posmood_c <-
+  lmer(
+    posmood_FP ~
+      group * episode + (1|ID),
+    data = da
+  )
+
+anova(mlm_posmood_c)
+```
+
+### Covarying for cognitive stimulation and warmth
+```{r}
+da <-
+  da %>% 
+  group_by(ID) %>% 
+  mutate(
+    stim_FP_mean = mean(stim_FP, na.rm = TRUE), 
+    stim_FP_pc = stim_FP - stim_FP_mean,
+    posreg_FP_mean = mean(posreg_FP), 
+    posreg_FP_pc = posreg_FP - posreg_FP_mean,
+    intrus_FP_mean = mean (intrus_FP, na.rm = TRUE),
+    intrus_FP_pc = intrus_FP - intrus_FP_mean
+  ) %>% 
+  ungroup()
+```
+
+#### Cognitive stimulation
+```{r}
+contrasts(da$group) = cbind( # control group is baseline
+  "learn" = c(0, 1, 0),
+  "teach" = c(0, 0, 1) 
+)
+
+mlm_h_c_stim <-
+  lmer(
+    intrus_FP ~
+      group * episode_f + 
+      stim_FP_mean +
+      stim_FP_pc +
+      (1|ID),
+    data = da
+  )
+anova(mlm_h_c_stim)
+parameters(mlm_h_c_stim, standardize = "refit")
+performance(mlm_h_c_stim)
+```
+```{r}
+contrasts(da$group) = cbind( # learn group is baseline
+  "control" = c(1, 0, 0),
+  "teach" = c(0, 0, 1) 
+)
+
+mlm_h_l_stim <-
+  lmer(
+    intrus_FP ~
+      group * episode_f + 
+      stim_FP_mean +
+      stim_FP_pc +
+      (1|ID),
+    data = da
+  )
+parameters(mlm_h_l_stim, standardize = "refit")
+```
+
+##### Visualize
+
+```{r}
+da %>% 
+  mutate(
+    group = recode_factor(
+      group,
+      "control" = "Control",
+      "teach" = "Teach",
+      "learn" = "Learn"
+    )
+  ) %>% 
+  ggplot(aes(stim_FP_pc, intrus_FP, color = group)) +
+  geom_jitter(size = 3, alpha = 1/3, color = "black") +
+  geom_smooth(method = "lm", size = 2, se = FALSE) +
+  scale_y_continuous(breaks = seq.int(1, 7, .5), limits = c(1, 6)) +
+  scale_x_continuous(breaks = seq.int(-2, 2, .5)) +
+  scale_colour_manual(values=cbbPalette) +
+  theme_pubr() +
+  theme(
+    strip.text = element_text(size = 16),
+    axis.title.y = element_text(size = 20),
+    axis.title.x = element_text(size = 20),
+    axis.text.y = element_text(size = 16),
+    axis.text.x = element_text(size = 16),
+    legend.title = element_text(size = 18),
+    legend.text = element_text(size = 16),
+    legend.position = "bottom"
+  ) +
+  labs(
+    x = "Cognitive stimulation\n(person-mean-centered)",
+    y = "Maternal intrusiveness",
+    color = NULL
+  )
+
+ggsave(
+  "~/Box/lucy_king_files/BABIES/teach_learn/figures/stim_intrus.png",
+  dpi = 600,
+  width = 6,
+  height = 5
+)
+```
+
+```{r}
+contrasts(da$group) = cbind( # reach group is baseline
+  "control" = c(1, 0, 0),
+  "learn" = c(0, 1, 0) 
+)
+
+mlm_h_t_stim <-
+  lmer(
+    intrus_FP ~
+      group * episode + 
+      stim_FP_mean +
+      stim_FP_pc +
+      (1|ID),
+    data = da
+  )
+parameters(mlm_h_t_stim, standardize = "refit")
+```
+
+##### In teach group only
+```{r}
+da_teach <-
+  da %>% 
+  filter(group == "teach")
+
+mlm_h_stim_teach <-
+  lmer(
+    intrus_FP ~
+      episode_f + 
+      stim_FP_mean +
+      stim_FP_pc +
+      (1|ID),
+    data = da
+  )
+anova(mlm_h_stim_teach)
+parameters(mlm_h_stim_teach, standardize = "refit")
+performance(mlm_h_stim_teach)
+```
+
+#### Warmth
+```{r}
+contrasts(da$group) = cbind( # control group is baseline
+  "learn" = c(0, 1, 0),
+  "teach" = c(0, 0, 1) 
+)
+
+mlm_h_c_posreg <-
+  lmer(
+    intrus_FP ~
+      group * episode_f + 
+      posreg_FP_mean +
+      posreg_FP_pc +
+      (1|ID),
+    data = da
+  )
+anova(mlm_h_c_posreg)
+parameters(mlm_h_c_posreg, standardize = "refit")
+performance(mlm_h_c_posreg)
+```
+
+```{r}
+contrasts(da$group) = cbind( # learn group is baseline
+  "control" = c(1, 0, 0),
+  "teach" = c(0, 0, 1) 
+)
+
+mlm_h_l_posreg <-
+  lmer(
+    intrus_FP ~
+      group * episode + 
+      posreg_FP_mean +
+      posreg_FP_pc +
+      (1|ID),
+    data = da
+  )
+parameters(mlm_h_l_posreg, standardize = "refit")
+```
+
+```{r}
+contrasts(da$group) = cbind( # reach group is baseline
+  "control" = c(1, 0, 0),
+  "learn" = c(0, 1, 0) 
+)
+
+mlm_h_t_posreg <-
+  lmer(
+    intrus_FP ~
+      group * episode + 
+      posreg_FP_mean +
+      posreg_FP_pc +
+      (1|ID),
+    data = da
+  )
+parameters(mlm_h_t_posreg, standardize = "refit")
+```
+
+#### Visualize
+
+```{r}
+da %>% 
+  mutate(
+    group = recode_factor(
+      group,
+      "control" = "Control",
+      "teach" = "Teach",
+      "learn" = "Learn"
+    )
+  ) %>% 
+  ggplot(aes(posreg_FP_pc, intrus_FP, color = group)) +
+  geom_jitter(size = 3, psych::alpha = 1/3, color = "black") +
+  geom_smooth(method = "lm", size = 2, se = FALSE) +
+  scale_y_continuous(breaks = seq.int(1, 7, .5), limits = c(1, 6)) +
+  scale_x_continuous(breaks = seq.int(-2, 2, .5)) +
+  scale_colour_manual(values=cbbPalette) +
+  theme_pubr() +
+  theme(
+    strip.text = element_text(size = 16),
+    axis.title.y = element_text(size = 20),
+    axis.title.x = element_text(size = 20),
+    axis.text.y = element_text(size = 16),
+    axis.text.x = element_text(size = 16),
+    legend.title = element_text(size = 18),
+    legend.text = element_text(size = 16),
+    legend.position = "bottom"
+  ) +
+  labs(
+    x = "Positve regard\n(person-mean-centered)",
+    y = "Maternal intrusiveness",
+    color = NULL
+  )
+
+ggsave(
+  "~/Box/lucy_king_files/BABIES/teach_learn/figures/posreg_intrus.png",
+  dpi = 600,
+  width = 6,
+  height = 5
+)
+```
+
+
+  
