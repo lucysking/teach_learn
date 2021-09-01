@@ -1,8 +1,16 @@
 ---
-title: "BABIES teach vs. learn analyses"
-author: "Lucy King"
-output: html_notebook
+title: "Analyses for Teaching and Learning from Baby: Inducing Explicit Parenting Goals Influences Caregiver Intrusiveness"
+
+
+author: "Lucy S. King"
+date: "2020"
+output: 
+  github_document:
+    toc: true
+    toc_depth: 2
 ---
+
+Please refer to https://osf.io/dt7ck?view_only=4381f7d2a4cf40b1abcf0b41f76cdf63 for pre-registration. 
 
 # Environment
 ```{r}
@@ -39,25 +47,37 @@ caregiving_file_wf <- paste0(
   "lab_caregiving_behavior/free_play_wf_10min_20210106.csv"
 )
 
-free_play_master_file <- "~/Box/Mooddata_Coordinating/BABIES/Data/final_scored_data/lab_caregiving_behavior/raw_data/PCIRS_FreePlay_MASTER_20200508.xlsx"
+free_play_master_file <- paste0(
+  data_home,
+  "lab_caregiving_behavior/raw_data/PCIRS_FreePlay_MASTER_20200508.xlsx"
+)
 
 demographics_file <- paste0(
   data_home,
   "demographics/demo_6mo_cleaned_final.csv"
 )
+
 cesd_file <- paste0(
   data_home,
   "CESD/cesd_6mo_complete.csv"
 )
+
 shipley_file <- paste0(
   data_home,
   "shipley/shipley_6mo_final_20200208.csv"
 )
+
 crisys_file <- paste0(
   data_home,
   "CRISYS/crisys_scored_6mo_complete.csv"
 )
 
+ibq_file <- paste0(
+  data_home,
+  "IBQ/ibq_scored_final.csv"
+)
+
+knitr::opts_chunk$set(warning=FALSE, message=FALSE)
 ```
 
 # Randomly pick control dyads to match sample size of largest treatment group
@@ -81,6 +101,7 @@ possible_controls %>%
   filter(episode >= 4, negmood_FP > 2.5) %>% 
   summarise(n_distinct(ID))
 ```
+
 ```{r}
 controls <-
   possible_controls %>% 
@@ -94,23 +115,18 @@ assignment <-
   read_csv(assignment_file) %>% 
   bind_rows(controls)
 ```
-# Read in data
-Videos that can be use in presentations_________________________________________
 
-Learn group:
-Decreased by 1: 1057 (can share but not with non-scientific groups), 1063, (can share all), 1069 (can share all), 1111 (can share but not with non-scientific groups)
-Decreased by 1.5: 112 (can share all)
-Stayed the same: 122 (can share all), 1103 (can share all)
+# Read in data
 
 ```{r}
-d <-
+d.0 <-
   read_csv(caregiving_file_lf) %>% 
   left_join(assignment, by = "ID") %>% 
-  filter(!is.na(group)) %>% 
   left_join(read_csv(demographics_file), by = "ID") %>% 
   left_join(read_csv(cesd_file), by = "ID") %>% 
   left_join(read_csv(shipley_file), by = "ID") %>% 
   left_join(read_csv(crisys_file), by = "ID") %>% 
+  left_join(read_csv(ibq_file), by = "ID") %>% 
   mutate(
     male = as.factor(male),
     group = as.factor(group),
@@ -140,18 +156,30 @@ d <-
     )
   ) 
 
+da.0 <-
+  d.0 %>% 
+  filter(episode >= 4)
+
+# data with only those included in teach/learn analyses
+d <-
+  d.0 %>% 
+  filter(!is.na(group)) 
+  
+
 da <-
   d %>% 
   filter(episode >= 4)
+```
 
-d_wf <-
+```{r}
+d_wf.0 <-
   read_csv(caregiving_file_wf) %>% 
   left_join(assignment, by = "ID") %>% 
-  filter(!is.na(group)) %>% 
   left_join(read_csv(demographics_file), by = "ID") %>% 
   left_join(read_csv(cesd_file), by = "ID") %>% 
   left_join(read_csv(shipley_file), by = "ID") %>% 
   left_join(read_csv(crisys_file), by = "ID") %>% 
+  left_join(read_csv(ibq_file), by = "ID") %>% 
   mutate(
     male = as.factor(male),
     group = as.factor(group),
@@ -180,6 +208,46 @@ d_wf <-
     )
   )
 
+# data with only those included in teach/learn analyses
+d_wf <-
+  read_csv(caregiving_file_wf) %>% 
+  left_join(assignment, by = "ID") %>% 
+  filter(!is.na(group)) %>% 
+  left_join(read_csv(demographics_file), by = "ID") %>% 
+  left_join(read_csv(cesd_file), by = "ID") %>% 
+  left_join(read_csv(shipley_file), by = "ID") %>% 
+  left_join(read_csv(crisys_file), by = "ID") %>% 
+  left_join(read_csv(ibq_file), by = "ID") %>% 
+  mutate(
+    male = as.factor(male),
+    group = as.factor(group),
+    college_or_higher = fct_collapse(
+      education_txt,
+      below = c(
+        "Trade/technical/vocational training",
+        "Associate degree",
+        "High school graduate/diploma/equivalent (i.e. GED)",
+        "Some college credit, no degree"
+      ),
+      college_or_higher = c(
+        "Bachelor's degree",
+        "Graduate degree"
+      )
+    ),
+    only_child = as.factor(
+      if_else(
+        ppl_in_home_allchild > 1,
+        "not", "only child"
+      )
+    ),
+    poc = if_else(
+      mom_race != "White" | mom_latinx == 1,
+      "POC", "White, Non-Hispanic"
+    )
+  )
+```
+
+```{r}
 fp_master <-
   readxl::read_xlsx(free_play_master_file) %>% 
   mutate_at(
@@ -190,7 +258,6 @@ fp_master <-
     vars(Sens_R2:NegMood_R2, Sens_R1:NegMood_R1),
     funs(str_to_lower)
   ) 
-
 ```
 
 # Cell sizes
@@ -198,9 +265,6 @@ fp_master <-
 d %>% 
   distinct(ID, .keep_all = TRUE) %>% 
   count(group)
-
-da %>% 
-  filter(group == "learn")
 ```
 
 # Examine missingness
@@ -215,13 +279,13 @@ d_wf %>%
   count(is.na(education))
 
 d_wf %>% 
-  count(group, is.na(shipley_6mo_total))
-
-d_wf %>% 
   count(group, is.na(cesd_total))
 
 d_wf %>% 
   count(group, is.na(crisys_total))
+
+d_wf %>% 
+  count(group, is.na(NEG))
 ```
 
 # Descriptive statistics
@@ -238,7 +302,7 @@ d_sample_means <-
       income_needs,
       cesd_total,
       crisys_total,
-
+      NEG
     ),
     funs(mean), na.rm = TRUE
   ) %>% 
@@ -253,7 +317,8 @@ d_sample_sds <-
       mom_age,
       income_needs,
       cesd_total,
-      crisys_total
+      crisys_total,
+      NEG
     ),
     funs(sd), na.rm = TRUE
   ) %>% 
@@ -268,7 +333,8 @@ d_sample_mins <-
       mom_age,
       income_needs,
       cesd_total,
-      crisys_total
+      crisys_total,
+      NEG
     ),
     funs(min), na.rm = TRUE
   ) %>% 
@@ -284,6 +350,7 @@ d_sample_maxs <-
       income_needs,
       cesd_total,
       crisys_total,
+      NEG
     ),
     funs(max), na.rm = TRUE
   ) %>% 
@@ -369,6 +436,15 @@ d_wf %>%
     crisys_1:crisys_68
   ) %>% 
   psych::alpha()
+
+d_wf %>% 
+  dplyr::select(
+    ibq_64, ibq_74, ibq_75, ibq_32, ibq_79, ibq_80,
+    ibq_2, ibq_3_r, ibq_4, ibq_21, ibq_52, ibq_53, ibq_62,
+    ibq_22, ibq_76, ibq_77, ibq_78, ibq_87, ibq_89,
+    ibq_61_r, ibq_50_r, ibq_51, ibq_59, ibq_60_r, ibq_73_r
+  ) %>% 
+  psych::alpha()
 ```
 
 ### Caregiving behavior
@@ -407,6 +483,7 @@ fp_master %>%
   na.omit() %>% 
   psych::ICC()
 ```
+
 ```{r}
 #positive regard
 fp_master %>%
@@ -442,6 +519,7 @@ fp_master %>%
   na.omit() %>% 
   psych::ICC()
 ```
+
 ## Distributions of caregiving behaviors
 ```{r}
 da %>% 
@@ -527,7 +605,8 @@ d_wf %>%
     `Maternal age (years)` = mom_age,
     `Income-to-needs ratio` = income_needs,
     `Maternal depressive symptoms` = cesd_total,
-    `Maternal recent life stress` = crisys_total
+    `Maternal recent life stress` = crisys_total,
+    `Infant negative emotionality` = NEG,
   ) %>% 
   gather(
     key, 
@@ -573,17 +652,16 @@ ggsave(
 
 ### Test differences
 ```{r}
-chisq.test(d_wf$college_or_higher, d_wf$group) 
 chisq.test(d_wf$poc, d_wf$group) 
 chisq.test(d_wf$male, d_wf$group) 
 chisq.test(d_wf$only_child, d_wf$group) 
-chisq.test(d_wf$mom_latinx, d_wf$group) 
 
 Anova(lm(mom_age ~ group, data = d_wf), type = 3) # marginal
 Anova(lm(income_needs ~ group, data = d_wf), type = 3) 
 Anova(lm(cesd_total ~ group, data = d_wf), type = 3) 
 Anova(lm(crisys_total ~ group, data = d_wf), type = 3)
 Anova(lm(age_behav ~ group, data = d_wf), type = 3)
+Anova(lm(NEG ~ group, data = d_wf), type = 3)
 ```
 
 # Test pre-registered hypotheses
@@ -616,13 +694,15 @@ mlm_h_c <-
 
 anova(mlm_h_c)
 
+summary(mlm_h_c)
+
 model_parameters(
   mlm_h_c, 
   standardize = "refit",
   df_method = "satterthwaite"
 )
 
-performance(mlm_h_c)
+eta_squared(mlm_h_c)
 ```
 
 ## Simple effects
@@ -658,7 +738,7 @@ contrasts(da$group) = cbind( # teach group is baseline
 
 mlm_h_t <-
   lmer(
-    scale(intrus_FP) ~
+    intrus_FP ~
       group * episode_f + (1|ID),
     data = da
   )
@@ -750,7 +830,7 @@ gg_summary_p <-
       "learn" = "Learn"
     )
   ) %>% 
-  ggplot(aes(episode_f, Intrusiveness, color = group)) 
+  ggplot(aes(episode_f, Intrusiveness, color = group, shape = group)) 
 
 
 gg_summary_p +
@@ -758,9 +838,18 @@ gg_summary_p +
     aes(ymin = Intrusiveness - intrus_se, ymax = Intrusiveness + intrus_se),
     size = 1.25
   ) +
-  geom_line(aes(group = group), size = 2) +
-  scale_colour_manual(values=cbbPalette) +
-  scale_y_continuous(breaks = seq.int(1, 7, .5), limits = c(1, 4)) +
+  geom_line(aes(group = group), size = 2, show.legend = FALSE) +
+  scale_colour_manual(
+    name = "Group",
+    values=cbbPalette,
+    labels = c("Control", "Teach", "Learn")
+  ) +
+  scale_shape_manual(
+    name = "Group",
+    values = c(16, 17, 15),
+    labels = c("Control", "Teach", "Learn")
+  ) +
+  scale_y_continuous(breaks = seq.int(1, 7, .5), limits = c(1, 5)) +
   theme_pubr() +
   theme(
     strip.text = element_text(size = 16),
@@ -775,7 +864,8 @@ gg_summary_p +
   labs(
     x = NULL,
     y = "Maternal intrusiveness",
-    color = NULL
+    color = NULL,
+    shape = NULL
   )
 
 ggsave(
@@ -808,7 +898,60 @@ intrus_diff %>%
   mutate(per = n / sum(n))
 
 intrus_diff %>% 
-  filter(group == "learn", decreased == TRUE)
+  count(group, decreased) %>% 
+  group_by(group) %>% 
+  mutate(per = n / sum(n))
+
+
+intrus_diff %>% 
+  count(group, increased) %>% 
+  group_by(group) %>% 
+  mutate(per = n / sum(n)) %>% 
+  mutate(
+    increased = factor(
+      increased,
+      levels = c("TRUE", "FALSE"),
+      labels = c("Increased", "Maintained/decreased")
+    ), 
+    group = recode_factor(
+      group,
+      "control" = "Control",
+      "teach" = "Teach",
+      "learn" = "Learn"
+    )
+  ) %>% 
+  ggplot(aes(fct_rev(increased), per, fill = group)) +
+  geom_col(position = "dodge") +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_manual(
+    name = "Group",
+    values=cbbPalette,
+    labels = c("Control", "Teach", "Learn")
+  ) +
+  coord_flip() +
+  theme_pubr() +
+  theme(
+    strip.text = element_text(size = 16),
+    axis.title.y = element_text(size = 20),
+    axis.title.x = element_text(size = 20),
+    axis.text.y = element_text(size = 18),
+    axis.text.x = element_text(size = 16),
+    legend.title = element_text(size = 18),
+    legend.text = element_text(size = 16),
+    legend.position = "bottom"
+  ) +
+  labs(
+    x = NULL,
+    fill = NULL,
+    y = "Percentage of mothers"
+  )
+
+ggsave(
+  "~/Box/lucy_king_files/BABIES/teach_learn/figures/percent_increased.png",
+  dpi = 600,
+  width = 10,
+  height = 5
+)
 ```
 
 # Additional analyses
@@ -819,7 +962,8 @@ intrus_diff %>%
 da <-
   da %>% 
   mutate(
-    male = as.factor(male)
+    male = as.factor(male),
+    only_child = as.factor(only_child)
   )
 ```
 
@@ -829,6 +973,7 @@ contrasts(da$group) = cbind( # control group is baseline
   "teach" = c(0, 0, 1)
 ) 
 contrasts(da$male) = c(-.5, .5) # effect code sex
+contrasts(da$only_child) = c(-.5, .5) # effect code birth order
 
 mlm_h_c_planned_wf <-
   lmer(
@@ -840,7 +985,63 @@ mlm_h_c_planned_wf <-
   )
 
 anova(mlm_h_c_planned_wf)
-parameters(mlm_h_c_planned_wf, standardize = "refit")
+summary(mlm_h_c_planned_wf)
+
+parameters(
+  mlm_h_c_planned_wf, 
+  df_method = "satterthwaite", 
+  standardize = "refit"
+)
+
+eta_squared(mlm_h_c_planned_wf)
+```
+```{r}
+contrasts(da$group) = cbind( # learn group is baseline
+  "learn" = c(1, 0, 0),
+  "teach" = c(0, 0, 1)
+) 
+
+mlm_h_l_planned_wf <-
+  lmer(
+    intrus_FP ~
+      group * episode_f + (1|ID) +
+      only_child +
+      male,
+    data = da
+  )
+
+summary(mlm_h_l_planned_wf)
+
+parameters(
+  mlm_h_l_planned_wf, 
+  df_method = "satterthwaite", 
+  standardize = "refit"
+)
+
+```
+```{r}
+contrasts(da$group) = cbind( # teach group is baseline
+  "control" = c(1, 0, 0),
+  "learn" = c(0, 1, 0)
+)
+
+mlm_h_t_planned_wf <-
+  lmer(
+    intrus_FP ~
+      group * episode_f + (1|ID) +
+      only_child +
+      male,
+    data = da
+  )
+
+summary(mlm_h_t_planned_wf)
+
+parameters(
+  mlm_h_t_planned_wf, 
+  df_method = "satterthwaite", 
+  standardize = "refit"
+)
+
 ```
 
 ## Using all free play data
@@ -863,7 +1064,7 @@ d <-
   )
 ```
 
-## Omnibus interaction effect with control group as baseline
+### Omnibus interaction effect with control group as baseline
 ```{r}
 contrasts(d$group) = cbind( # control group is baseline
   "learn" = c(0, 1, 0),
@@ -878,10 +1079,19 @@ mlm_h_c_all <-
     data = d
   )
 anova(mlm_h_c_all)
-parameters(mlm_h_c_all)
-performance(mlm_h_c_all)
+
+summary(mlm_h_c_all)
+
+model_parameters(
+  mlm_h_c_all, 
+  df_method = "satterthwaite", 
+  standardize = "refit"
+)
+
+eta_squared(mlm_h_c_all)
 ```
-## learn group as baseline
+
+### learn group as baseline
 ```{r}
 contrasts(d$group) = cbind( # learn group is baseline
   "control" = c(1, 0, 0),
@@ -895,10 +1105,15 @@ mlm_h_l_all <-
     data = d
   )
 summary(mlm_h_l_all)
-parameters(mlm_h_l_all)
+
+model_parameters(
+  mlm_h_l_all, 
+  df_method = "satterthwaite", 
+  standardize = "refit"
+)
 ```
 
-## teach group as baseline
+### teach group as baseline
 ```{r}
 contrasts(d$group) = cbind( # teach group is baseline
   "control" = c(1, 0, 0),
@@ -911,7 +1126,169 @@ mlm_h_t_all <-
       group * episode_pc + (1|ID),
     data = d
   )
-parameters(mlm_h_t_all)
+summary(mlm_h_t_all)
+
+parameters(
+  mlm_h_t_all, 
+  df_method = "satterthwaite", 
+  standardize = "refit"
+)
+```
+### Visualize effects using all free play data
+```{r}
+d_summary <-
+  d %>% 
+  mutate(
+    episode_f = recode_factor(
+      episode_f,
+      "1" = "Epoch 1",
+      "2" = "Epoch 2",
+      "3" = "Epoch 3",
+      "4" = "Epoch 4",
+      "5" = "Epoch 5"
+    )
+  ) %>% 
+  group_by(group, episode_f) %>% 
+  summarise(
+    n = n(),
+    Intrusiveness = mean(intrus_FP),
+    intrus_sd = sd(intrus_FP),
+    intrus_se = intrus_sd / sqrt(n),
+    `Cognitive stimulation` = mean(stim_FP, na.rm = TRUE),
+    cog_stim_sd = sd(stim_FP, na.rm = TRUE),
+    cog_stim_se = cog_stim_sd / sqrt(n),
+    posreg = mean(posreg_FP),
+    posreg_sd = sd(posreg_FP),
+    posreg_se = posreg_sd / sqrt(n)
+  )
+```
+
+```{r}
+gg_d_summary_p <- 
+  d_summary %>% 
+  mutate(
+    group = recode_factor(
+      group,
+      "control" = "Control",
+      "teach" = "Teach",
+      "learn" = "Learn"
+    )
+  ) %>% 
+  ggplot(aes(episode_f, Intrusiveness, color = group, shape = group)) +
+  labs(
+    x = NULL,
+    y = "Maternal intrusiveness",
+    color = NULL,
+    shape = NULL
+  )
+
+gg_d_summary_p +
+  geom_pointrange(
+    aes(ymin = Intrusiveness - intrus_se, ymax = Intrusiveness + intrus_se),
+    size = 1.25
+  ) +
+  geom_line(aes(group = group), size = 2, show.legend = FALSE) +
+  scale_colour_manual(
+    name = "Group",
+    values=cbbPalette,
+    labels = c("Control", "Teach", "Learn")
+  ) +
+  scale_shape_manual(
+    name = "Group",
+    values = c(16, 17, 15),
+    labels = c("Control", "Teach", "Learn")
+  ) +
+  scale_y_continuous(breaks = seq.int(1, 7, .5), limits = c(1, 4)) +
+  geom_vline(xintercept = "Epoch 4", size = 2, linetype = "dashed") +
+  geom_label(
+    x = "Epoch 4",
+    y = 3.75,
+    label = "Goal induction",
+    color = "black",
+    size = 5
+  ) +
+  theme_pubr() +
+  theme(
+    strip.text = element_text(size = 16),
+    axis.title.y = element_text(size = 20),
+    axis.title.x = element_text(size = 20),
+    axis.text.y = element_text(size = 16),
+    axis.text.x = element_text(size = 16),
+    legend.title = element_text(size = 18),
+    legend.text = element_text(size = 16),
+    legend.position = "bottom"
+  ) 
+
+ggsave(
+  "~/Box/lucy_king_files/BABIES/teach_learn/figures/all_fp_data_lineplot.png",
+  dpi = 600,
+  width = 6,
+  height = 5
+)
+```
+
+```{r}
+gg_d_summary_p_cog <- 
+  d_summary %>% 
+  mutate(
+    group = recode_factor(
+      group,
+      "control" = "Control",
+      "teach" = "Teach",
+      "learn" = "Learn"
+    )
+  ) %>% 
+  ggplot(aes(episode_f, `Cognitive stimulation`, color = group, shape = group)) 
+
+gg_d_summary_p_cog +
+  geom_pointrange(
+    aes(ymin = `Cognitive stimulation` - cog_stim_se, ymax = `Cognitive stimulation` + cog_stim_se),
+    size = 1.25
+  ) +
+  geom_line(aes(group = group), size = 2, show.legend = FALSE) +
+  scale_colour_manual(
+    name = "Group",
+    values=cbbPalette,
+    labels = c("Control", "Teach", "Learn")
+  ) +
+  scale_shape_manual(
+    name = "Group",
+    values = c(16, 17, 15),
+    labels = c("Control", "Teach", "Learn")
+  ) +
+  scale_y_continuous(breaks = seq.int(1, 7, .5), limits = c(1, 4)) +
+  geom_vline(xintercept = "Epoch 4", size = 2, linetype = "dashed") +
+  geom_label(
+    x = "Epoch 4",
+    y = 3.75,
+    label = "Goal induction",
+    color = "black",
+    size = 5
+  ) +
+  theme_pubr() +
+  theme(
+    strip.text = element_text(size = 16),
+    axis.title.y = element_text(size = 20),
+    axis.title.x = element_text(size = 20),
+    axis.text.y = element_text(size = 16),
+    axis.text.x = element_text(size = 16),
+    legend.title = element_text(size = 18),
+    legend.text = element_text(size = 16),
+    legend.position = "bottom"
+  ) +
+  labs(
+    x = NULL,
+    y = "Maternal cognitive stimulation",
+    color = NULL,
+    shape = NULL
+  )
+
+ggsave(
+  "~/Box/lucy_king_files/BABIES/teach_learn/figures/all_fp_data_cogstim_lineplot.png",
+  dpi = 600,
+  width = 6,
+  height = 5
+)
 ```
 
 ## Other caregiving behaviors
@@ -927,13 +1304,13 @@ da_time_2 <-
   filter(episode == "5")
 
 da_time_1 %>% 
-  select(stim_FP, education, income_needs) %>% 
+  select(stim_FP, intrus_FP, posreg_FP) %>% 
   correlate() %>% 
   shave(upper = FALSE) %>% 
   fashion() 
 
 da_time_2 %>% 
-  select(stim_FP, education, income_needs) %>% 
+  select(stim_FP, intrus_FP, posreg_FP) %>% 
   correlate() %>% 
   shave(upper = FALSE) %>% 
   fashion()
@@ -955,7 +1332,6 @@ mlm_sens_c <-
   )
 
 anova(mlm_sens_c)
-parameters(mlm_sens_c)
 ```
 
 ### Warmth
@@ -968,13 +1344,21 @@ contrasts(da$group) = cbind( # control group is baseline
 mlm_posreg_c <-
   lmer(
     posreg_FP ~
-      group * episode + (1|ID),
+      group * episode_f + (1|ID),
     data = da
   )
 
 anova(mlm_posreg_c)
-parameters(mlm_posreg_c, standardize = "refit")
-performance(mlm_posreg_c)
+
+summary(mlm_posreg_c)
+
+parameters(
+  mlm_posreg_c, 
+  df_method = "satterthwaite",
+  standardize = "refit"
+)
+
+eta_squared(mlm_posreg_c)
 ```
 
 ```{r}
@@ -986,11 +1370,16 @@ contrasts(da$group) = cbind( # learn group is baseline
 mlm_posreg_l <-
   lmer(
     posreg_FP ~
-      group * episode + (1|ID),
+      group * episode_f + (1|ID),
     data = da
   )
+summary(mlm_posreg_l)
 
-parameters(mlm_posreg_l, standardize = "refit")
+parameters(
+  mlm_posreg_l, 
+  df_method = "satterthwaite", 
+  standardize = "refit"
+)
 ```
 
 ```{r}
@@ -1002,11 +1391,16 @@ contrasts(da$group) = cbind( # teach group is baseline
 mlm_posreg_t <-
   lmer(
     posreg_FP ~
-      group * episode + (1|ID),
+      group * episode_f + (1|ID),
     data = da
   )
+summary(mlm_posreg_t)
 
-parameters(mlm_posreg_t, standardize = "refit")
+parameters(
+  mlm_posreg_t,
+  df_method = "satterthwaite", 
+  standardize = "refit"
+)
 ```
 
 #### Visualize
@@ -1021,17 +1415,26 @@ gg_summary_p_posreg <-
       "learn" = "Learn"
     )
   ) %>% 
-  ggplot(aes(episode_f, posreg, color = group)) 
+  ggplot(aes(episode_f, posreg, color = group, shape = group)) 
 
 
 gg_summary_p_posreg +
   geom_pointrange(
     aes(ymin = posreg - posreg_se, ymax = posreg + posreg_se),
-    size = .75
+    size = 1.25
   ) +
-  geom_line(aes(group = group), size = 2) +
-  scale_colour_manual(values=cbbPalette) +
-  scale_y_continuous(breaks = seq.int(1, 7, .5), limits = c(1, 6)) +
+  geom_line(aes(group = group), size = 2, show.legend = FALSE) +
+  scale_colour_manual(
+    name = "Group",
+    values=cbbPalette,
+    labels = c("Control", "Teach", "Learn")
+  ) +
+  scale_shape_manual(
+    name = "Group",
+    values = c(16, 17, 15),
+    labels = c("Control", "Teach", "Learn")
+  ) +
+  scale_y_continuous(breaks = seq.int(1, 7, .5), limits = c(1, 5)) +
   theme_pubr() +
   theme(
     strip.text = element_text(size = 16),
@@ -1057,7 +1460,6 @@ ggsave(
 )
 ```
 
-
 ### Cognitive stimulation
 ```{r}
 contrasts(da$group) = cbind( # control group is baseline
@@ -1068,13 +1470,21 @@ contrasts(da$group) = cbind( # control group is baseline
 mlm_stim_c <-
   lmer(
     stim_FP ~
-      group * episode + (1|ID),
+      group * episode_f + (1|ID),
     data = da
   )
 
 anova(mlm_stim_c)
-parameters(mlm_stim_c, standardize = "refit")
-performance(mlm_stim_c)
+
+summary(mlm_stim_c)
+
+parameters(
+  mlm_stim_c, 
+  df_method = "satterthwaite", 
+  standardize = "refit"
+)
+
+eta_squared(mlm_stim_c)
 ```
 
 ```{r}
@@ -1086,11 +1496,16 @@ contrasts(da$group) = cbind( # learn group is baseline
 mlm_stim_l <-
   lmer(
     stim_FP ~
-      group * episode + (1|ID),
+      group * episode_f + (1|ID),
     data = da
   )
+summary(mlm_stim_l)
 
-parameters(mlm_stim_l, standardize = "refit")
+parameters(
+  mlm_stim_l, 
+  df_method = "satterthwaite", 
+  standardize = "refit"
+)
 ```
 
 ```{r}
@@ -1102,11 +1517,16 @@ contrasts(da$group) = cbind( # teach group is baseline
 mlm_stim_t <-
   lmer(
     stim_FP ~
-      group * episode + (1|ID),
+      group * episode_f + (1|ID),
     data = da
   )
+summary(mlm_stim_t)
 
-parameters(mlm_stim_t)
+parameters(
+  mlm_stim_t, 
+  df_method = "satterthwaite", 
+  standardize = "refit"
+)
 ```
 
 #### Visualize
@@ -1121,17 +1541,27 @@ gg_summary_p_stim <-
       "learn" = "Learn"
     )
   ) %>% 
-  ggplot(aes(episode_f, cog_stim, color = group)) 
+  ggplot(aes(episode_f, cog_stim, color = group, shape = group)) 
 
 
 gg_summary_p_stim +
   geom_pointrange(
     aes(ymin = cog_stim - cog_stim_se, ymax = cog_stim + cog_stim_se),
-    size = .75
+    size = 1.25
   ) +
-  geom_line(aes(group = group), size = 2) +
+  geom_line(aes(group = group), size = 2, show.legend = FALSE) +
   scale_colour_manual(values=cbbPalette) +
   scale_y_continuous(breaks = seq.int(1, 7, .5), limits = c(1, 5)) +
+  scale_colour_manual(
+    name = "Group",
+    values = cbbPalette,
+    labels = c("Control", "Teach", "Learn")
+  ) +
+  scale_shape_manual(
+    name = "Group",
+    values = c(16, 17, 15),
+    labels = c("Control", "Teach", "Learn")
+  ) +
   theme_pubr() +
   theme(
     strip.text = element_text(size = 16),
@@ -1157,7 +1587,6 @@ ggsave(
 )
 ```
 
-
 ### Negative Regard
 ```{r}
 contrasts(da$group) = cbind( # control group is baseline
@@ -1168,7 +1597,7 @@ contrasts(da$group) = cbind( # control group is baseline
 mlm_negreg_c <-
   lmer(
     negreg_FP ~
-      group * episode + (1|ID),
+      group * episode_f + (1|ID),
     data = da
   )
 
@@ -1185,27 +1614,11 @@ contrasts(da$group) = cbind( # control group is baseline
 mlm_detach_c <-
   lmer(
     detach_FP ~
-      group * episode + (1|ID),
+      group * episode_f + (1|ID),
     data = da
   )
 
 anova(mlm_detach_c)
-```
-### Infant negative mood
-```{r}
-contrasts(da$group) = cbind( # control group is baseline
-  "learn" = c(0, 1, 0),
-  "teach" = c(0, 0, 1) 
-)
-
-mlm_negmood_c <-
-  lmer(
-    negmood_FP ~
-      group * episode + (1|ID),
-    data = da
-  )
-
-anova(mlm_negmood_c)
 ```
 
 ### Infant positive mood
@@ -1218,14 +1631,14 @@ contrasts(da$group) = cbind( # control group is baseline
 mlm_posmood_c <-
   lmer(
     posmood_FP ~
-      group * episode + (1|ID),
+      group * episode_f + (1|ID),
     data = da
   )
 
 anova(mlm_posmood_c)
 ```
 
-### Covarying for cognitive stimulation and warmth
+### Covarying for other caregiving behaviors
 ```{r}
 da <-
   da %>% 
@@ -1241,7 +1654,7 @@ da <-
   ungroup()
 ```
 
-#### Cognitive stimulation
+#### Adjusting for cognitive stimulation
 ```{r}
 contrasts(da$group) = cbind( # control group is baseline
   "learn" = c(0, 1, 0),
@@ -1258,9 +1671,19 @@ mlm_h_c_stim <-
     data = da
   )
 anova(mlm_h_c_stim)
-parameters(mlm_h_c_stim, standardize = "refit")
-performance(mlm_h_c_stim)
+
+summary(mlm_h_c_stim)
+
+parameters(
+  mlm_h_c_stim, 
+  df_method = "satterthwaite", 
+  standardize = "refit"
+)
+
+eta_squared(mlm_h_c_stim)
 ```
+
+
 ```{r}
 contrasts(da$group) = cbind( # learn group is baseline
   "control" = c(1, 0, 0),
@@ -1276,7 +1699,37 @@ mlm_h_l_stim <-
       (1|ID),
     data = da
   )
-parameters(mlm_h_l_stim, standardize = "refit")
+summary(mlm_h_l_stim)
+
+parameters(
+  mlm_h_l_stim, 
+  df_method = "satterthwaite", 
+  standardize = "refit"
+)
+```
+
+```{r}
+contrasts(da$group) = cbind( # teach group is baseline
+  "control" = c(1, 0, 0),
+  "teach" = c(0, 1, 0) 
+)
+
+mlm_h_t_stim <-
+  lmer(
+    intrus_FP ~
+      group * episode_f + 
+      stim_FP_mean +
+      stim_FP_pc +
+      (1|ID),
+    data = da
+  )
+summary(mlm_h_t_stim)
+
+parameters(
+  mlm_h_t_stim, 
+  df_method = "satterthwaite", 
+  standardize = "refit"
+)
 ```
 
 ##### Visualize
@@ -1291,9 +1744,9 @@ da %>%
       "learn" = "Learn"
     )
   ) %>% 
-  ggplot(aes(stim_FP_pc, intrus_FP, color = group)) +
+  ggplot(aes(stim_FP_pc, intrus_FP)) +
   geom_jitter(size = 3, alpha = 1/3, color = "black") +
-  geom_smooth(method = "lm", size = 2, se = FALSE) +
+  geom_smooth(method = "lm", size = 2, color = "black") +
   scale_y_continuous(breaks = seq.int(1, 7, .5), limits = c(1, 6)) +
   scale_x_continuous(breaks = seq.int(-2, 2, .5)) +
   scale_colour_manual(values=cbbPalette) +
@@ -1309,7 +1762,7 @@ da %>%
     legend.position = "bottom"
   ) +
   labs(
-    x = "Cognitive stimulation\n(person-mean-centered)",
+    x = "Maternal cognitive stimulation\n(change from epoch 4 to epoch 5)",
     y = "Maternal intrusiveness",
     color = NULL
   )
@@ -1322,45 +1775,8 @@ ggsave(
 )
 ```
 
-```{r}
-contrasts(da$group) = cbind( # reach group is baseline
-  "control" = c(1, 0, 0),
-  "learn" = c(0, 1, 0) 
-)
 
-mlm_h_t_stim <-
-  lmer(
-    intrus_FP ~
-      group * episode + 
-      stim_FP_mean +
-      stim_FP_pc +
-      (1|ID),
-    data = da
-  )
-parameters(mlm_h_t_stim, standardize = "refit")
-```
-
-##### In teach group only
-```{r}
-da_teach <-
-  da %>% 
-  filter(group == "teach")
-
-mlm_h_stim_teach <-
-  lmer(
-    intrus_FP ~
-      episode_f + 
-      stim_FP_mean +
-      stim_FP_pc +
-      (1|ID),
-    data = da
-  )
-anova(mlm_h_stim_teach)
-parameters(mlm_h_stim_teach, standardize = "refit")
-performance(mlm_h_stim_teach)
-```
-
-#### Warmth
+#### Adjusting for warmth
 ```{r}
 contrasts(da$group) = cbind( # control group is baseline
   "learn" = c(0, 1, 0),
@@ -1377,8 +1793,16 @@ mlm_h_c_posreg <-
     data = da
   )
 anova(mlm_h_c_posreg)
-parameters(mlm_h_c_posreg, standardize = "refit")
-performance(mlm_h_c_posreg)
+
+summary(mlm_h_c_posreg)
+
+parameters(
+  mlm_h_c_posreg, 
+  df_method = "satterthwaite", 
+  standardize = "refit"
+)
+
+eta_squared(mlm_h_c_posreg)
 ```
 
 ```{r}
@@ -1390,17 +1814,23 @@ contrasts(da$group) = cbind( # learn group is baseline
 mlm_h_l_posreg <-
   lmer(
     intrus_FP ~
-      group * episode + 
+      group * episode_f + 
       posreg_FP_mean +
       posreg_FP_pc +
       (1|ID),
     data = da
   )
-parameters(mlm_h_l_posreg, standardize = "refit")
+summary(mlm_h_l_posreg)
+
+parameters(
+  mlm_h_l_posreg, 
+  df_method = "satterthwaite", 
+  standardize = "refit"
+)
 ```
 
 ```{r}
-contrasts(da$group) = cbind( # reach group is baseline
+contrasts(da$group) = cbind( #teach group is baseline
   "control" = c(1, 0, 0),
   "learn" = c(0, 1, 0) 
 )
@@ -1408,13 +1838,19 @@ contrasts(da$group) = cbind( # reach group is baseline
 mlm_h_t_posreg <-
   lmer(
     intrus_FP ~
-      group * episode + 
+      group * episode_f + 
       posreg_FP_mean +
       posreg_FP_pc +
       (1|ID),
     data = da
   )
-parameters(mlm_h_t_posreg, standardize = "refit")
+summary(mlm_h_t_posreg)
+
+parameters(
+  mlm_h_t_posreg, 
+  df_method = "satterthwaite", 
+  standardize = "refit"
+)
 ```
 
 #### Visualize
@@ -1430,7 +1866,7 @@ da %>%
     )
   ) %>% 
   ggplot(aes(posreg_FP_pc, intrus_FP, color = group)) +
-  geom_jitter(size = 3, psych::alpha = 1/3, color = "black") +
+  geom_jitter(size = 3, alpha = 1/3, color = "black") +
   geom_smooth(method = "lm", size = 2, se = FALSE) +
   scale_y_continuous(breaks = seq.int(1, 7, .5), limits = c(1, 6)) +
   scale_x_continuous(breaks = seq.int(-2, 2, .5)) +
