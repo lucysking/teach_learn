@@ -33,6 +33,7 @@ Lucy S. King
         child](#covarying-for-infant-sex-and-only-child)
     -   [Using all free play data](#using-all-free-play-data)
     -   [Other caregiving behaviors](#other-caregiving-behaviors)
+-   [Export data for sharing](#export-data-for-sharing)
 
 Please refer to
 <https://osf.io/dt7ck?view_only=4381f7d2a4cf40b1abcf0b41f76cdf63> for
@@ -115,6 +116,18 @@ library(performance)
 library(effectsize)
 library(parameters)
 library(corrr)
+library(codebook)
+library(labelled)
+```
+
+    ## 
+    ## Attaching package: 'labelled'
+
+    ## The following object is masked from 'package:codebook':
+    ## 
+    ##     to_factor
+
+``` r
 set.seed(123456)
 
 cbbPalette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
@@ -150,11 +163,6 @@ demographics_file <- paste0(
 cesd_file <- paste0(
   data_home,
   "CESD/cesd_6mo_complete.csv"
-)
-
-shipley_file <- paste0(
-  data_home,
-  "shipley/shipley_6mo_final_20200208.csv"
 )
 
 crisys_file <- paste0(
@@ -222,7 +230,6 @@ d.0 <-
   left_join(assignment, by = "ID") %>% 
   left_join(read_csv(demographics_file), by = "ID") %>% 
   left_join(read_csv(cesd_file), by = "ID") %>% 
-  left_join(read_csv(shipley_file), by = "ID") %>% 
   left_join(read_csv(crisys_file), by = "ID") %>% 
   left_join(read_csv(ibq_file), by = "ID") %>% 
   mutate(
@@ -275,7 +282,6 @@ d_wf.0 <-
   left_join(assignment, by = "ID") %>% 
   left_join(read_csv(demographics_file), by = "ID") %>% 
   left_join(read_csv(cesd_file), by = "ID") %>% 
-  left_join(read_csv(shipley_file), by = "ID") %>% 
   left_join(read_csv(crisys_file), by = "ID") %>% 
   left_join(read_csv(ibq_file), by = "ID") %>% 
   mutate(
@@ -313,7 +319,6 @@ d_wf <-
   filter(!is.na(group)) %>% 
   left_join(read_csv(demographics_file), by = "ID") %>% 
   left_join(read_csv(cesd_file), by = "ID") %>% 
-  left_join(read_csv(shipley_file), by = "ID") %>% 
   left_join(read_csv(crisys_file), by = "ID") %>% 
   left_join(read_csv(ibq_file), by = "ID") %>% 
   mutate(
@@ -1328,31 +1333,31 @@ ggsave(
 chisq.test(d_wf$poc, d_wf$group) 
 ```
 
-    ## 
-    ##  Pearson's Chi-squared test
-    ## 
-    ## data:  d_wf$poc and d_wf$group
-    ## X-squared = 0.56065, df = 2, p-value = 0.7555
+
+        Pearson's Chi-squared test
+
+    data:  d_wf$poc and d_wf$group
+    X-squared = 0.56065, df = 2, p-value = 0.7555
 
 ``` r
 chisq.test(d_wf$male, d_wf$group) 
 ```
 
-    ## 
-    ##  Pearson's Chi-squared test
-    ## 
-    ## data:  d_wf$male and d_wf$group
-    ## X-squared = 0.75846, df = 2, p-value = 0.6844
+
+        Pearson's Chi-squared test
+
+    data:  d_wf$male and d_wf$group
+    X-squared = 0.75846, df = 2, p-value = 0.6844
 
 ``` r
 chisq.test(d_wf$only_child, d_wf$group) 
 ```
 
-    ## 
-    ##  Pearson's Chi-squared test
-    ## 
-    ## data:  d_wf$only_child and d_wf$group
-    ## X-squared = 1.1662, df = 2, p-value = 0.5582
+
+        Pearson's Chi-squared test
+
+    data:  d_wf$only_child and d_wf$group
+    X-squared = 1.1662, df = 2, p-value = 0.5582
 
 ``` r
 Anova(lm(mom_age ~ group, data = d_wf), type = 3) # marginal
@@ -4004,4 +4009,75 @@ ggsave(
   width = 6,
   height = 5
 )
+```
+
+# Export data for sharing
+
+``` r
+d_share <-
+  da %>% 
+  select(
+    ID,
+    episode_f,
+    episode:male,
+    stim_FP_mean:intrus_FP_pc,
+    mom_race,
+    poc,
+    mom_latinx,
+    annual_income_txt,
+    education_txt,
+    college_or_higher,
+    only_child,
+    age_behav,
+    mom_age,
+    cesd_total,
+    crisys_total,
+    NEG
+  ) %>% 
+  arrange(ID, episode) %>% 
+  # replace ID numbers
+  group_by(ID) %>% 
+  mutate(
+    git_id = sample(200000,1)
+  ) %>% 
+  ungroup() %>% 
+  select(
+    git_id,
+    everything(),
+    -ID
+  )
+  
+var_label(d_share) <- 
+  list(
+    episode_f = "Episode of free play coded as a factor",
+    episode = "Episode of free play couded as numeric",
+    sens_FP = "Maternal sensitivity",
+    intrus_FP = "Maternal intrusiveness",
+    posreg_FP = "Maternal positive regard (warmth)",
+    stim_FP = "Maternal cognitive stimulation",
+    negreg_FP = "Maternal negative regard",
+    negmood_FP = "Infant negative mood",
+    posmood_FP = "Infant positive mood",
+    detach_FP = "Maternal detachment",
+    group = "Group assignment",
+    male = "Infant male sex assigned at birth",
+    stim_FP_mean = "Mean maternal intrusiveness across free play",
+    stim_FP_pc = "Person-mean-centered maternal intrusiveness",
+    mom_race = "Maternal self-reported race",
+    poc = "Based on maternal self-reported race, White or person of color",
+    mom_latinx = "Maternals self-reported Hispanic/Latinx ethnicity",
+    annual_income_txt = "Maternal self-reported annual household income",
+    education_txt = "Maternal self-reported highest level of education",
+    college_or_higher = "Based on maternal self-reported education, whether attended 4-year college or >",
+    only_child = "Infant is only child in household",
+    age_behav = "Infant age at free play interaction",
+    mom_age = "Maternal age at free play interaction",
+    cesd_total = "Maternal current self-reported depressive symotoms on the CES-D",
+    crisys_total = "Maternal recent life adversity on the CRISYS",
+    NEG = "Maternal reported infant negative affectivity in the IBQ-R-SF"
+  )
+    
+metadata(d_share)$name <- "Analysed data for \"Teaching or Learning from Baby: Inducing Explicit Parenting Goals Influences Caregiver Intrusiveness\" (King et al. 2021)"
+
+#write_csv(d_share, "~/Desktop/BABIES/teach_learn/teach_learn_analyzed_data_20210902.csv")
 ```
