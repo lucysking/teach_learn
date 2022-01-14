@@ -34,9 +34,11 @@ cbbPalette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2"
 # Data
 data_home <- "~/Box/Mooddata_Coordinating/BABIES/Data/final_scored_data/"
 
+completed_FP_file <- "~/Box/lucy_king_files/BABIES/teach_learn/completed_fp_IDs.csv"
+
 assignment_file <- paste0(
   data_home, 
-  "lab_caregiving_behavior/free_play_intervention_assignment.csv"
+  "lab_caregiving_behavior/free_play_intervention_assignment_with_controls_20210307.csv"
 )
 
 caregiving_file_lf <- paste0(
@@ -80,37 +82,30 @@ knitr::opts_chunk$set(warning=FALSE, message=FALSE)
 # Randomly pick control dyads to match sample size of largest treatment group
 Inclusion criteria: infant showed no significant fussiness during last two epochs of free play 
 ```{r}
+completed_FP <-
+  read_csv(completed_FP_file) 
+
 all_fp_data <-
   read_csv(caregiving_file_lf) %>% 
   filter(!is.na(intrus_FP)) %>% 
-  distinct(ID) # plus 3 never coded
+  distinct(ID) 
 
 possible_controls <- #
   read_csv(caregiving_file_lf) %>% 
-  left_join(read_csv(assignment_file), by = "ID") %>% 
-  left_join(read_csv(demographics_file) %>% select(ID, behav_visit_date),  by = "ID") %>% 
+  full_join(read_csv(completed_FP_file)) %>% 
+  left_join(read_csv(assignment_file) %>% filter(group != "control"), by = "ID") %>% 
   filter(is.na(group)) %>% 
   filter(!ID %in% c(126, 129, 131, 137, 1059, 1062, 1066, 1070, 1077)) # these IDs attempted intervention but were ultimately excluded (infant distress, diaper changing, did not understand instructions)
 
-possible_controls_n <- possible_controls %>% summarise(n_distinct(ID)) %>% pull() # plus 1 never coded
+possible_controls_n <- possible_controls %>% summarise(n_distinct(ID)) 
 
 possible_controls %>% 
-  filter(episode >= 4, negmood_FP > 2.5) %>% 
+  filter(!is.na(episode), episode >= 4, negmood_FP > 2.5) %>% 
   summarise(n_distinct(ID))
 ```
-
 ```{r}
-controls <-
-  possible_controls %>% 
-  filter(episode >= 4) %>% 
-  filter(negmood_FP < 3) %>% 
-  distinct(ID) %>% 
-  sample_n(size = 22) %>% 
-  mutate(group = "control")
-
 assignment <-
-  read_csv(assignment_file) %>% 
-  bind_rows(controls)
+  read_csv(assignment_file) 
 ```
 
 # Read in data
@@ -427,12 +422,6 @@ d_wf %>%
 
 d_wf %>% 
   dplyr::select(
-    crisys_1:crisys_68
-  ) %>% 
-  psych::alpha()
-
-d_wf %>% 
-  dplyr::select(
     ibq_64, ibq_74, ibq_75, ibq_32, ibq_79, ibq_80,
     ibq_2, ibq_3_r, ibq_4, ibq_21, ibq_52, ibq_53, ibq_62,
     ibq_22, ibq_76, ibq_77, ibq_78, ibq_87, ibq_89,
@@ -443,9 +432,15 @@ d_wf %>%
 
 ### Caregiving behavior
 ```{r}
+# number coded by two raters
+fp_master %>% 
+  distinct(ID, Second_Rater, First_Rater) %>% 
+  count(!is.na(Second_Rater), !is.na(First_Rater))
+```
+
+```{r}
 #intrusiveness
 fp_master %>%
-  filter(Episode < 4) %>% 
   dplyr::select(
     intrus_r1,
     intrus_r2
@@ -457,7 +452,6 @@ fp_master %>%
 ```{r}
 #sensitivity
 fp_master %>%
-  filter(Episode < 4) %>% 
   dplyr::select(
     sens_r1,
     sens_r2
@@ -469,7 +463,6 @@ fp_master %>%
 ```{r}
 #stimulation
 fp_master %>%
-  filter(Episode < 4) %>% 
   dplyr::select(
     stim_r1,
     stim_r2
@@ -481,7 +474,6 @@ fp_master %>%
 ```{r}
 #positive regard
 fp_master %>%
-  filter(Episode < 4) %>% 
   dplyr::select(
     posreg_r1,
     posreg_r2
@@ -493,7 +485,6 @@ fp_master %>%
 ```{r}
 #negative regard
 fp_master %>%
-  filter(Episode < 4) %>% 
   dplyr::select(
     negreg_r1,
     negreg_r2
@@ -505,7 +496,6 @@ fp_master %>%
 ```{r}
 #detachment
 fp_master %>%
-  filter(Episode < 4) %>% 
   dplyr::select(
     detach_r1,
     detach_r2
@@ -762,7 +752,7 @@ da_summary <-
   ) %>% 
   group_by(group, episode_f) %>% 
   summarise(
-    n = n(),
+    n = sum(!is.na(intrus_FP)),
     Intrusiveness = mean(intrus_FP),
     intrus_sd = sd(intrus_FP),
     intrus_se = intrus_sd / sqrt(n),
@@ -1013,6 +1003,7 @@ parameters(
 )
 
 ```
+
 ```{r}
 contrasts(da$group) = cbind( # teach group is baseline
   "control" = c(1, 0, 0),
@@ -1956,6 +1947,11 @@ var_label(d_share) <-
   )
     
 metadata(d_share)$name <- "Analysed data for \"Teaching or Learning from Baby: Inducing Explicit Parenting Goals Influences Caregiver Intrusiveness\" (King et al. 2021)"
+
+# rio::export(
+#   de,
+#   "~/Desktop/BABIES/hair_cortisol/teach_learn_analyzed_data_20210902.rds"
+# )
 
 #write_csv(d_share, "~/Desktop/BABIES/teach_learn/teach_learn_analyzed_data_20210902.csv")
 ```

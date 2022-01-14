@@ -46,12 +46,12 @@ pre-registration.
 library(tidyverse)
 ```
 
-    ## ── Attaching packages ─────────────────────────────────────── tidyverse 1.3.0 ──
+    ## ── Attaching packages ─────────────────────────────────────── tidyverse 1.3.1 ──
 
-    ## ✓ ggplot2 3.3.3     ✓ purrr   0.3.4
-    ## ✓ tibble  3.1.2     ✓ dplyr   1.0.4
-    ## ✓ tidyr   1.1.2     ✓ stringr 1.4.0
-    ## ✓ readr   1.4.0     ✓ forcats 0.5.1
+    ## ✓ ggplot2 3.3.5     ✓ purrr   0.3.4
+    ## ✓ tibble  3.1.5     ✓ dplyr   1.0.7
+    ## ✓ tidyr   1.1.3     ✓ stringr 1.4.0
+    ## ✓ readr   2.0.2     ✓ forcats 0.5.1
 
     ## ── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
     ## x dplyr::filter() masks stats::filter()
@@ -89,13 +89,6 @@ library(lme4)
     ## 
     ##     expand, pack, unpack
 
-    ## Registered S3 methods overwritten by 'lme4':
-    ##   method                          from
-    ##   cooks.distance.influence.merMod car 
-    ##   influence.merMod                car 
-    ##   dfbeta.influence.merMod         car 
-    ##   dfbetas.influence.merMod        car
-
 ``` r
 library(lmerTest)
 ```
@@ -114,6 +107,23 @@ library(lmerTest)
 ``` r
 library(performance)
 library(effectsize)
+```
+
+    ## Registered S3 methods overwritten by 'parameters':
+    ##   method                           from      
+    ##   as.double.parameters_kurtosis    datawizard
+    ##   as.double.parameters_skewness    datawizard
+    ##   as.double.parameters_smoothness  datawizard
+    ##   as.numeric.parameters_kurtosis   datawizard
+    ##   as.numeric.parameters_skewness   datawizard
+    ##   as.numeric.parameters_smoothness datawizard
+    ##   print.parameters_distribution    datawizard
+    ##   print.parameters_kurtosis        datawizard
+    ##   print.parameters_skewness        datawizard
+    ##   summary.parameters_kurtosis      datawizard
+    ##   summary.parameters_skewness      datawizard
+
+``` r
 library(parameters)
 library(corrr)
 library(codebook)
@@ -135,9 +145,11 @@ cbbPalette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2"
 # Data
 data_home <- "~/Box/Mooddata_Coordinating/BABIES/Data/final_scored_data/"
 
+completed_FP_file <- "~/Box/lucy_king_files/BABIES/teach_learn/completed_fp_IDs.csv"
+
 assignment_file <- paste0(
   data_home, 
-  "lab_caregiving_behavior/free_play_intervention_assignment.csv"
+  "lab_caregiving_behavior/free_play_intervention_assignment_with_controls_20210307.csv"
 )
 
 caregiving_file_lf <- paste0(
@@ -184,42 +196,36 @@ Inclusion criteria: infant showed no significant fussiness during last
 two epochs of free play
 
 ``` r
+completed_FP <-
+  read_csv(completed_FP_file) 
+
 all_fp_data <-
   read_csv(caregiving_file_lf) %>% 
   filter(!is.na(intrus_FP)) %>% 
-  distinct(ID) # plus 3 never coded
+  distinct(ID) 
 
 possible_controls <- #
   read_csv(caregiving_file_lf) %>% 
-  left_join(read_csv(assignment_file), by = "ID") %>% 
-  left_join(read_csv(demographics_file) %>% select(ID, behav_visit_date),  by = "ID") %>% 
+  full_join(read_csv(completed_FP_file)) %>% 
+  left_join(read_csv(assignment_file) %>% filter(group != "control"), by = "ID") %>% 
   filter(is.na(group)) %>% 
   filter(!ID %in% c(126, 129, 131, 137, 1059, 1062, 1066, 1070, 1077)) # these IDs attempted intervention but were ultimately excluded (infant distress, diaper changing, did not understand instructions)
 
-possible_controls_n <- possible_controls %>% summarise(n_distinct(ID)) %>% pull() # plus 1 never coded
+possible_controls_n <- possible_controls %>% summarise(n_distinct(ID)) 
 
 possible_controls %>% 
-  filter(episode >= 4, negmood_FP > 2.5) %>% 
+  filter(!is.na(episode), episode >= 4, negmood_FP > 2.5) %>% 
   summarise(n_distinct(ID))
 ```
 
-    ## # A tibble: 1 x 1
+    ## # A tibble: 1 × 1
     ##   `n_distinct(ID)`
     ##              <int>
     ## 1               27
 
 ``` r
-controls <-
-  possible_controls %>% 
-  filter(episode >= 4) %>% 
-  filter(negmood_FP < 3) %>% 
-  distinct(ID) %>% 
-  sample_n(size = 22) %>% 
-  mutate(group = "control")
-
 assignment <-
-  read_csv(assignment_file) %>% 
-  bind_rows(controls)
+  read_csv(assignment_file) 
 ```
 
 # Read in data
@@ -371,9 +377,9 @@ d %>%
   count(group)
 ```
 
-    ## # A tibble: 3 x 2
+    ## # A tibble: 3 × 2
     ##   group       n
-    ## * <fct>   <int>
+    ##   <fct>   <int>
     ## 1 control    22
     ## 2 learn      23
     ## 3 teach      21
@@ -385,9 +391,9 @@ d_wf %>%
   count(is.na(mom_age))
 ```
 
-    ## # A tibble: 1 x 2
+    ## # A tibble: 1 × 2
     ##   `is.na(mom_age)`     n
-    ## * <lgl>            <int>
+    ##   <lgl>            <int>
     ## 1 FALSE               66
 
 ``` r
@@ -395,9 +401,9 @@ d_wf %>%
   count(is.na(ppl_in_home_allchild))
 ```
 
-    ## # A tibble: 1 x 2
+    ## # A tibble: 1 × 2
     ##   `is.na(ppl_in_home_allchild)`     n
-    ## * <lgl>                         <int>
+    ##   <lgl>                         <int>
     ## 1 FALSE                            66
 
 ``` r
@@ -405,9 +411,9 @@ d_wf %>%
   count(is.na(education))
 ```
 
-    ## # A tibble: 1 x 2
+    ## # A tibble: 1 × 2
     ##   `is.na(education)`     n
-    ## * <lgl>              <int>
+    ##   <lgl>              <int>
     ## 1 FALSE                 66
 
 ``` r
@@ -415,7 +421,7 @@ d_wf %>%
   count(group, is.na(cesd_total))
 ```
 
-    ## # A tibble: 3 x 3
+    ## # A tibble: 3 × 3
     ##   group   `is.na(cesd_total)`     n
     ##   <fct>   <lgl>               <int>
     ## 1 control FALSE                  22
@@ -427,7 +433,7 @@ d_wf %>%
   count(group, is.na(crisys_total))
 ```
 
-    ## # A tibble: 5 x 3
+    ## # A tibble: 5 × 3
     ##   group   `is.na(crisys_total)`     n
     ##   <fct>   <lgl>                 <int>
     ## 1 control FALSE                    19
@@ -441,7 +447,7 @@ d_wf %>%
   count(group, is.na(NEG))
 ```
 
-    ## # A tibble: 5 x 3
+    ## # A tibble: 5 × 3
     ##   group   `is.na(NEG)`     n
     ##   <fct>   <lgl>        <int>
     ## 1 control FALSE           19
@@ -538,7 +544,7 @@ d_sample_means %>%
   )
 ```
 
-    ## # A tibble: 6 x 13
+    ## # A tibble: 6 × 13
     ##   variable     mean_control mean_learn  mean_teach  sd_control sd_learn sd_teach
     ##   <chr>        <chr>        <chr>       <chr>            <dbl>    <dbl>    <dbl>
     ## 1 age_behav    6.11, 0.51   6.21, 0.38  6.06, 0.28        0.51     0.38     0.28
@@ -559,7 +565,7 @@ d_wf %>%
   )
 ```
 
-    ## # A tibble: 2 x 4
+    ## # A tibble: 2 × 4
     ##   college_or_higher control learn teach
     ##   <fct>               <int> <int> <int>
     ## 1 below                   1     6     2
@@ -575,7 +581,7 @@ d_wf %>%
   )
 ```
 
-    ## # A tibble: 5 x 4
+    ## # A tibble: 5 × 4
     ##   mom_race                               control learn teach
     ##   <chr>                                    <int> <int> <int>
     ## 1 White                                       12    14    12
@@ -593,7 +599,7 @@ d_wf %>%
   )
 ```
 
-    ## # A tibble: 3 x 4
+    ## # A tibble: 3 × 4
     ##   mom_latinx control learn teach
     ##        <dbl>   <int> <int> <int>
     ## 1          0      18    20    19
@@ -609,7 +615,7 @@ d_wf %>%
   )
 ```
 
-    ## # A tibble: 2 x 4
+    ## # A tibble: 2 × 4
     ##   male  control learn teach
     ##   <fct>   <int> <int> <int>
     ## 1 0           9    12    11
@@ -624,7 +630,7 @@ d_wf %>%
   )
 ```
 
-    ## # A tibble: 2 x 4
+    ## # A tibble: 2 × 4
     ##   only_child control learn teach
     ##   <fct>        <int> <int> <int>
     ## 1 not              9    13    11
@@ -720,211 +726,6 @@ d_wf %>%
     ## cesd_18 0.44 0.39 0.08 0.09    0
     ## cesd_19 0.74 0.18 0.03 0.05    0
     ## cesd_20 0.55 0.35 0.06 0.05    0
-
-``` r
-d_wf %>% 
-  dplyr::select(
-    crisys_1:crisys_68
-  ) %>% 
-  psych::alpha()
-```
-
-    ## Some items ( crisys_1 crisys_21 crisys_23 crisys_26 crisys_31 crisys_32 crisys_33 crisys_35 crisys_39 crisys_40 crisys_41 crisys_45 crisys_48 crisys_49 crisys_50 crisys_53 crisys_54 crisys_55 crisys_56 crisys_62 ) were negatively correlated with the total scale and 
-    ## probably should be reversed.  
-    ## To do this, run the function again with the 'check.keys=TRUE' option
-
-    ## 
-    ## Reliability analysis   
-    ## Call: psych::alpha(x = .)
-    ## 
-    ##   raw_alpha std.alpha G6(smc) average_r S/N   ase mean    sd median_r
-    ##       0.79      0.85    0.95     0.092 5.8 0.036 0.08 0.064   -0.024
-    ## 
-    ##  lower alpha upper     95% confidence boundaries
-    ## 0.72 0.79 0.86 
-    ## 
-    ##  Reliability if an item is dropped:
-    ##           raw_alpha std.alpha G6(smc) average_r S/N alpha se var.r  med.r
-    ## crisys_1       0.80      0.86    0.95     0.096 6.0    0.034 0.052 -0.024
-    ## crisys_2       0.79      0.85    0.95     0.092 5.8    0.037 0.052 -0.024
-    ## crisys_3       0.79      0.85    0.95     0.091 5.7    0.036 0.052 -0.024
-    ## crisys_4       0.79      0.85    0.95     0.092 5.8    0.036 0.052 -0.024
-    ## crisys_5       0.78      0.84    0.95     0.086 5.4    0.037 0.048 -0.024
-    ## crisys_6       0.78      0.85    0.95     0.089 5.5    0.037 0.050 -0.024
-    ## crisys_7       0.78      0.84    0.95     0.086 5.4    0.037 0.048 -0.024
-    ## crisys_8       0.78      0.84    0.95     0.087 5.4    0.037 0.049 -0.024
-    ## crisys_9       0.78      0.85    0.95     0.089 5.5    0.037 0.050 -0.024
-    ## crisys_10      0.79      0.86    0.95     0.094 5.9    0.036 0.052 -0.024
-    ## crisys_12      0.78      0.84    0.95     0.086 5.4    0.037 0.048 -0.024
-    ## crisys_13      0.78      0.84    0.95     0.086 5.4    0.037 0.048 -0.024
-    ## crisys_14      0.78      0.85    0.94     0.088 5.5    0.037 0.050 -0.024
-    ## crisys_15      0.78      0.85    0.95     0.089 5.6    0.037 0.050 -0.024
-    ## crisys_16      0.78      0.85    0.95     0.089 5.6    0.037 0.051 -0.024
-    ## crisys_17      0.78      0.85    0.95     0.088 5.5    0.037 0.050 -0.024
-    ## crisys_18      0.78      0.85    0.95     0.087 5.5    0.037 0.050 -0.024
-    ## crisys_19      0.78      0.85    0.95     0.087 5.5    0.037 0.050 -0.024
-    ## crisys_21      0.79      0.86    0.96     0.094 5.9    0.036 0.052 -0.024
-    ## crisys_22      0.78      0.85    0.94     0.091 5.7    0.037 0.052 -0.024
-    ## crisys_23      0.79      0.85    0.95     0.093 5.9    0.036 0.052 -0.024
-    ## crisys_25      0.80      0.86    0.95     0.094 5.9    0.035 0.052 -0.024
-    ## crisys_26      0.79      0.85    0.95     0.093 5.8    0.036 0.051 -0.024
-    ## crisys_27      0.78      0.85    0.95     0.092 5.8    0.037 0.052 -0.024
-    ## crisys_28      0.79      0.85    0.95     0.092 5.8    0.037 0.052 -0.024
-    ## crisys_29      0.78      0.85    0.95     0.091 5.7    0.037 0.052 -0.024
-    ## crisys_31      0.79      0.85    0.95     0.093 5.8    0.036 0.051 -0.024
-    ## crisys_32      0.80      0.86    0.95     0.095 6.0    0.034 0.052 -0.024
-    ## crisys_33      0.80      0.86    0.95     0.096 6.0    0.035 0.052 -0.024
-    ## crisys_34      0.79      0.85    0.95     0.094 5.9    0.035 0.052 -0.024
-    ## crisys_35      0.79      0.86    0.95     0.094 5.9    0.035 0.052 -0.024
-    ## crisys_36      0.79      0.86    0.95     0.094 5.9    0.036 0.052 -0.024
-    ## crisys_37      0.79      0.86    0.95     0.095 6.0    0.036 0.052 -0.024
-    ## crisys_39      0.79      0.86    0.95     0.095 6.0    0.035 0.052 -0.024
-    ## crisys_40      0.79      0.86    0.95     0.095 6.0    0.036 0.052 -0.024
-    ## crisys_41      0.79      0.86    0.95     0.095 6.0    0.036 0.052 -0.024
-    ## crisys_44      0.79      0.86    0.95     0.094 5.9    0.036 0.052 -0.024
-    ## crisys_45      0.79      0.85    0.95     0.093 5.8    0.036 0.051 -0.024
-    ## crisys_48      0.79      0.86    0.95     0.095 6.0    0.036 0.052 -0.024
-    ## crisys_49      0.79      0.86    0.95     0.094 5.9    0.036 0.052 -0.024
-    ## crisys_50      0.79      0.86    0.95     0.094 5.9    0.036 0.052 -0.024
-    ## crisys_51      0.79      0.85    0.95     0.093 5.9    0.036 0.052 -0.024
-    ## crisys_53      0.79      0.85    0.95     0.093 5.9    0.035 0.052 -0.024
-    ## crisys_54      0.79      0.85    0.94     0.093 5.9    0.036 0.052 -0.024
-    ## crisys_55      0.80      0.86    0.95     0.096 6.0    0.035 0.052 -0.024
-    ## crisys_56      0.79      0.86    0.94     0.094 5.9    0.036 0.052 -0.024
-    ## crisys_57      0.78      0.85    0.94     0.090 5.6    0.037 0.052 -0.024
-    ## crisys_58      0.79      0.85    0.94     0.092 5.7    0.037 0.052 -0.024
-    ## crisys_59      0.79      0.85    0.95     0.090 5.6    0.037 0.051 -0.024
-    ## crisys_60      0.78      0.85    0.95     0.089 5.6    0.037 0.051 -0.024
-    ## crisys_61      0.78      0.84    0.95     0.086 5.4    0.037 0.048 -0.024
-    ## crisys_62      0.79      0.85    0.95     0.093 5.9    0.036 0.052 -0.024
-    ## crisys_63      0.78      0.85    0.95     0.088 5.5    0.037 0.050 -0.024
-    ## crisys_64      0.79      0.85    0.95     0.093 5.8    0.036 0.052 -0.024
-    ## crisys_65      0.78      0.85    0.95     0.089 5.5    0.037 0.051 -0.024
-    ## crisys_66      0.78      0.84    0.95     0.086 5.4    0.037 0.048 -0.024
-    ## crisys_67      0.79      0.86    0.95     0.094 5.9    0.036 0.052 -0.024
-    ## crisys_68      0.79      0.85    0.95     0.092 5.8    0.036 0.053 -0.024
-    ## 
-    ##  Item statistics 
-    ##            n  raw.r   std.r   r.cor r.drop  mean   sd
-    ## crisys_1  61  0.033 -0.0332 -0.0515 -0.066 0.230 0.42
-    ## crisys_2  61  0.368  0.2910  0.2842  0.320 0.049 0.22
-    ## crisys_3  61  0.350  0.3512  0.3506  0.271 0.180 0.39
-    ## crisys_4  61  0.274  0.3069  0.3063  0.186 0.213 0.41
-    ## crisys_5  61  0.674  0.7953  0.7621  0.660 0.016 0.13
-    ## crisys_6  61  0.450  0.5627  0.5717  0.419 0.033 0.18
-    ## crisys_7  60  0.674  0.8005  0.7674  0.664 0.017 0.13
-    ## crisys_8  61  0.620  0.6917  0.7041  0.596 0.033 0.18
-    ## crisys_9  61  0.493  0.5797  0.5774  0.463 0.033 0.18
-    ## crisys_10 61  0.136  0.1105  0.0988  0.092 0.033 0.18
-    ## crisys_12 61  0.674  0.7953  0.7621  0.660 0.016 0.13
-    ## crisys_13 60  0.674  0.8006  0.7676  0.664 0.017 0.13
-    ## crisys_14 61  0.574  0.6216  0.6342  0.541 0.049 0.22
-    ## crisys_15 61  0.486  0.5587  0.5686  0.449 0.049 0.22
-    ## crisys_16 61  0.512  0.5469  0.5533  0.468 0.066 0.25
-    ## crisys_17 60  0.522  0.5814  0.5563  0.485 0.050 0.22
-    ## crisys_18 61  0.620  0.6810  0.6448  0.596 0.033 0.18
-    ## crisys_19 61  0.620  0.6810  0.6448  0.596 0.033 0.18
-    ## crisys_21 61  0.077  0.0920  0.0821  0.048 0.016 0.13
-    ## crisys_22 61  0.455  0.3956  0.3997  0.372 0.230 0.42
-    ## crisys_23 61  0.156  0.1748  0.1743  0.116 0.033 0.18
-    ## crisys_25 61  0.197  0.0847  0.0759  0.097 0.246 0.43
-    ## crisys_26 61  0.137  0.2001  0.1917  0.109 0.016 0.13
-    ## crisys_27 61  0.423  0.3043  0.3044  0.327 0.328 0.47
-    ## crisys_28 61  0.401  0.3027  0.3040  0.297 0.443 0.50
-    ## crisys_29 61  0.423  0.4042  0.4028  0.345 0.180 0.39
-    ## crisys_31 61  0.137  0.2001  0.1917  0.109 0.016 0.13
-    ## crisys_32 61  0.055  0.0071 -0.0069 -0.033 0.180 0.39
-    ## crisys_33 61  0.012 -0.0125 -0.0254 -0.058 0.098 0.30
-    ## crisys_34 61  0.185  0.1479  0.1486  0.101 0.164 0.37
-    ## crisys_35 61  0.113  0.1073  0.1011  0.056 0.066 0.25
-    ## crisys_36 61  0.077  0.1055  0.0981  0.048 0.016 0.13
-    ## crisys_37 61  0.047  0.0466  0.0396  0.018 0.016 0.13
-    ## crisys_39 60  0.023  0.0298  0.0224 -0.018 0.033 0.18
-    ## crisys_40 61  0.068  0.0657  0.0630  0.026 0.033 0.18
-    ## crisys_41 61  0.018  0.0388  0.0319 -0.012 0.016 0.13
-    ## crisys_44 61  0.131  0.1205  0.1199  0.091 0.033 0.18
-    ## crisys_45 60  0.145  0.2036  0.1549  0.114 0.017 0.13
-    ## crisys_48 61  0.144  0.0667  0.0621  0.088 0.066 0.25
-    ## crisys_49 60  0.165  0.0915  0.0893  0.103 0.083 0.28
-    ## crisys_50 61  0.129  0.0773  0.0712  0.072 0.066 0.25
-    ## crisys_51 61  0.195  0.1795  0.1527  0.155 0.033 0.18
-    ## crisys_53 61  0.174  0.1761  0.1750  0.084 0.197 0.40
-    ## crisys_54 60  0.173  0.1836  0.1825  0.125 0.050 0.22
-    ## crisys_55 61 -0.015 -0.0340 -0.0585 -0.086 0.098 0.30
-    ## crisys_56 60  0.181  0.1224  0.1215  0.138 0.033 0.18
-    ## crisys_57 60  0.444  0.4678  0.4788  0.379 0.133 0.34
-    ## crisys_58 61  0.356  0.3240  0.3283  0.273 0.197 0.40
-    ## crisys_59 60  0.401  0.4823  0.4873  0.361 0.050 0.22
-    ## crisys_60 61  0.497  0.5072  0.5166  0.453 0.066 0.25
-    ## crisys_61 61  0.674  0.7953  0.7621  0.660 0.016 0.13
-    ## crisys_62 61  0.250  0.1914  0.1927  0.188 0.082 0.28
-    ## crisys_63 61  0.535  0.6424  0.6434  0.507 0.033 0.18
-    ## crisys_64 61  0.334  0.2165  0.2133  0.250 0.180 0.39
-    ## crisys_65 60  0.524  0.5695  0.5690  0.490 0.050 0.22
-    ## crisys_66 61  0.674  0.7953  0.7621  0.660 0.016 0.13
-    ## crisys_67 61  0.137  0.1192  0.1135  0.109 0.016 0.13
-    ## crisys_68 61  0.338  0.2716  0.2627  0.232 0.607 0.49
-    ## 
-    ## Non missing response frequency for each item
-    ##              0    1 miss
-    ## crisys_1  0.77 0.23 0.08
-    ## crisys_2  0.95 0.05 0.08
-    ## crisys_3  0.82 0.18 0.08
-    ## crisys_4  0.79 0.21 0.08
-    ## crisys_5  0.98 0.02 0.08
-    ## crisys_6  0.97 0.03 0.08
-    ## crisys_7  0.98 0.02 0.09
-    ## crisys_8  0.97 0.03 0.08
-    ## crisys_9  0.97 0.03 0.08
-    ## crisys_10 0.97 0.03 0.08
-    ## crisys_12 0.98 0.02 0.08
-    ## crisys_13 0.98 0.02 0.09
-    ## crisys_14 0.95 0.05 0.08
-    ## crisys_15 0.95 0.05 0.08
-    ## crisys_16 0.93 0.07 0.08
-    ## crisys_17 0.95 0.05 0.09
-    ## crisys_18 0.97 0.03 0.08
-    ## crisys_19 0.97 0.03 0.08
-    ## crisys_21 0.98 0.02 0.08
-    ## crisys_22 0.77 0.23 0.08
-    ## crisys_23 0.97 0.03 0.08
-    ## crisys_25 0.75 0.25 0.08
-    ## crisys_26 0.98 0.02 0.08
-    ## crisys_27 0.67 0.33 0.08
-    ## crisys_28 0.56 0.44 0.08
-    ## crisys_29 0.82 0.18 0.08
-    ## crisys_31 0.98 0.02 0.08
-    ## crisys_32 0.82 0.18 0.08
-    ## crisys_33 0.90 0.10 0.08
-    ## crisys_34 0.84 0.16 0.08
-    ## crisys_35 0.93 0.07 0.08
-    ## crisys_36 0.98 0.02 0.08
-    ## crisys_37 0.98 0.02 0.08
-    ## crisys_39 0.97 0.03 0.09
-    ## crisys_40 0.97 0.03 0.08
-    ## crisys_41 0.98 0.02 0.08
-    ## crisys_44 0.97 0.03 0.08
-    ## crisys_45 0.98 0.02 0.09
-    ## crisys_48 0.93 0.07 0.08
-    ## crisys_49 0.92 0.08 0.09
-    ## crisys_50 0.93 0.07 0.08
-    ## crisys_51 0.97 0.03 0.08
-    ## crisys_53 0.80 0.20 0.08
-    ## crisys_54 0.95 0.05 0.09
-    ## crisys_55 0.90 0.10 0.08
-    ## crisys_56 0.97 0.03 0.09
-    ## crisys_57 0.87 0.13 0.09
-    ## crisys_58 0.80 0.20 0.08
-    ## crisys_59 0.95 0.05 0.09
-    ## crisys_60 0.93 0.07 0.08
-    ## crisys_61 0.98 0.02 0.08
-    ## crisys_62 0.92 0.08 0.08
-    ## crisys_63 0.97 0.03 0.08
-    ## crisys_64 0.82 0.18 0.08
-    ## crisys_65 0.95 0.05 0.09
-    ## crisys_66 0.98 0.02 0.08
-    ## crisys_67 0.98 0.02 0.08
-    ## crisys_68 0.39 0.61 0.08
 
 ``` r
 d_wf %>% 
@@ -1038,9 +839,22 @@ d_wf %>%
 ### Caregiving behavior
 
 ``` r
+# number coded by two raters
+fp_master %>% 
+  distinct(ID, Second_Rater, First_Rater) %>% 
+  count(!is.na(Second_Rater), !is.na(First_Rater))
+```
+
+    ## # A tibble: 3 × 3
+    ##   `!is.na(Second_Rater)` `!is.na(First_Rater)`     n
+    ##   <lgl>                  <lgl>                 <int>
+    ## 1 FALSE                  TRUE                     80
+    ## 2 TRUE                   FALSE                    29
+    ## 3 TRUE                   TRUE                     28
+
+``` r
 #intrusiveness
 fp_master %>%
-  filter(Episode < 4) %>% 
   dplyr::select(
     intrus_r1,
     intrus_r2
@@ -1053,19 +867,19 @@ fp_master %>%
     ## 
     ## Intraclass correlation coefficients 
     ##                          type  ICC   F df1 df2       p lower bound upper bound
-    ## Single_raters_absolute   ICC1 0.61 4.1  83  84 2.9e-10        0.48        0.71
-    ## Single_random_raters     ICC2 0.61 4.1  83  83 3.5e-10        0.48        0.71
-    ## Single_fixed_raters      ICC3 0.61 4.1  83  83 3.5e-10        0.48        0.71
-    ## Average_raters_absolute ICC1k 0.76 4.1  83  84 2.9e-10        0.65        0.83
-    ## Average_random_raters   ICC2k 0.76 4.1  83  83 3.5e-10        0.65        0.83
-    ## Average_fixed_raters    ICC3k 0.76 4.1  83  83 3.5e-10        0.65        0.83
+    ## Single_raters_absolute   ICC1 0.57 3.6 139 140 8.3e-14        0.47        0.66
+    ## Single_random_raters     ICC2 0.57 3.6 139 139 9.6e-14        0.47        0.66
+    ## Single_fixed_raters      ICC3 0.57 3.6 139 139 9.6e-14        0.47        0.66
+    ## Average_raters_absolute ICC1k 0.72 3.6 139 140 8.3e-14        0.64        0.79
+    ## Average_random_raters   ICC2k 0.72 3.6 139 139 9.6e-14        0.64        0.79
+    ## Average_fixed_raters    ICC3k 0.72 3.6 139 139 9.6e-14        0.64        0.79
     ## 
-    ##  Number of subjects = 84     Number of Judges =  2
+    ##  Number of subjects = 140     Number of Judges =  2
+    ## See the help file for a discussion of the other 4 McGraw and Wong estimates,
 
 ``` r
 #sensitivity
 fp_master %>%
-  filter(Episode < 4) %>% 
   dplyr::select(
     sens_r1,
     sens_r2
@@ -1078,19 +892,19 @@ fp_master %>%
     ## 
     ## Intraclass correlation coefficients 
     ##                          type  ICC   F df1 df2       p lower bound upper bound
-    ## Single_raters_absolute   ICC1 0.68 5.2  83  84 4.1e-13        0.57        0.76
-    ## Single_random_raters     ICC2 0.68 5.3  83  83 4.1e-13        0.57        0.76
-    ## Single_fixed_raters      ICC3 0.68 5.3  83  83 4.1e-13        0.57        0.77
-    ## Average_raters_absolute ICC1k 0.81 5.2  83  84 4.1e-13        0.72        0.87
-    ## Average_random_raters   ICC2k 0.81 5.3  83  83 4.1e-13        0.72        0.87
-    ## Average_fixed_raters    ICC3k 0.81 5.3  83  83 4.1e-13        0.73        0.87
+    ## Single_raters_absolute   ICC1 0.65 4.8 139 140 6.3e-19        0.57        0.73
+    ## Single_random_raters     ICC2 0.66 4.9 139 139 1.7e-19        0.57        0.73
+    ## Single_fixed_raters      ICC3 0.66 4.9 139 139 1.7e-19        0.58        0.73
+    ## Average_raters_absolute ICC1k 0.79 4.8 139 140 6.3e-19        0.72        0.84
+    ## Average_random_raters   ICC2k 0.79 4.9 139 139 1.7e-19        0.72        0.84
+    ## Average_fixed_raters    ICC3k 0.80 4.9 139 139 1.7e-19        0.73        0.85
     ## 
-    ##  Number of subjects = 84     Number of Judges =  2
+    ##  Number of subjects = 140     Number of Judges =  2
+    ## See the help file for a discussion of the other 4 McGraw and Wong estimates,
 
 ``` r
 #stimulation
 fp_master %>%
-  filter(Episode < 4) %>% 
   dplyr::select(
     stim_r1,
     stim_r2
@@ -1103,19 +917,19 @@ fp_master %>%
     ## 
     ## Intraclass correlation coefficients 
     ##                          type  ICC   F df1 df2       p lower bound upper bound
-    ## Single_raters_absolute   ICC1 0.72 6.2  83  84 2.7e-15        0.62        0.80
-    ## Single_random_raters     ICC2 0.72 6.2  83  83 3.6e-15        0.62        0.80
-    ## Single_fixed_raters      ICC3 0.72 6.2  83  83 3.6e-15        0.62        0.80
-    ## Average_raters_absolute ICC1k 0.84 6.2  83  84 2.7e-15        0.77        0.89
-    ## Average_random_raters   ICC2k 0.84 6.2  83  83 3.6e-15        0.77        0.89
-    ## Average_fixed_raters    ICC3k 0.84 6.2  83  83 3.6e-15        0.77        0.89
+    ## Single_raters_absolute   ICC1 0.70 5.7 139 140 1.3e-22        0.62        0.77
+    ## Single_random_raters     ICC2 0.70 5.8 139 139 9.0e-23        0.62        0.77
+    ## Single_fixed_raters      ICC3 0.70 5.8 139 139 9.0e-23        0.63        0.77
+    ## Average_raters_absolute ICC1k 0.82 5.7 139 140 1.3e-22        0.77        0.87
+    ## Average_random_raters   ICC2k 0.83 5.8 139 139 9.0e-23        0.77        0.87
+    ## Average_fixed_raters    ICC3k 0.83 5.8 139 139 9.0e-23        0.77        0.87
     ## 
-    ##  Number of subjects = 84     Number of Judges =  2
+    ##  Number of subjects = 140     Number of Judges =  2
+    ## See the help file for a discussion of the other 4 McGraw and Wong estimates,
 
 ``` r
 #positive regard
 fp_master %>%
-  filter(Episode < 4) %>% 
   dplyr::select(
     posreg_r1,
     posreg_r2
@@ -1128,19 +942,19 @@ fp_master %>%
     ## 
     ## Intraclass correlation coefficients 
     ##                          type  ICC   F df1 df2       p lower bound upper bound
-    ## Single_raters_absolute   ICC1 0.74 6.6  83  84 4.2e-16        0.64        0.81
-    ## Single_random_raters     ICC2 0.74 8.1  83  83 5.7e-19        0.59        0.83
-    ## Single_fixed_raters      ICC3 0.78 8.1  83  83 5.7e-19        0.70        0.84
-    ## Average_raters_absolute ICC1k 0.85 6.6  83  84 4.2e-16        0.78        0.89
-    ## Average_random_raters   ICC2k 0.85 8.1  83  83 5.7e-19        0.74        0.91
-    ## Average_fixed_raters    ICC3k 0.88 8.1  83  83 5.7e-19        0.82        0.91
+    ## Single_raters_absolute   ICC1 0.72 6.2 139 140 1.8e-24        0.65        0.78
+    ## Single_random_raters     ICC2 0.73 7.3 139 139 6.4e-28        0.61        0.80
+    ## Single_fixed_raters      ICC3 0.76 7.3 139 139 6.4e-28        0.69        0.81
+    ## Average_raters_absolute ICC1k 0.84 6.2 139 140 1.8e-24        0.79        0.88
+    ## Average_random_raters   ICC2k 0.84 7.3 139 139 6.4e-28        0.76        0.89
+    ## Average_fixed_raters    ICC3k 0.86 7.3 139 139 6.4e-28        0.82        0.90
     ## 
-    ##  Number of subjects = 84     Number of Judges =  2
+    ##  Number of subjects = 140     Number of Judges =  2
+    ## See the help file for a discussion of the other 4 McGraw and Wong estimates,
 
 ``` r
 #negative regard
 fp_master %>%
-  filter(Episode < 4) %>% 
   dplyr::select(
     negreg_r1,
     negreg_r2
@@ -1153,19 +967,19 @@ fp_master %>%
     ## 
     ## Intraclass correlation coefficients 
     ##                          type  ICC   F df1 df2       p lower bound upper bound
-    ## Single_raters_absolute   ICC1 0.61 4.1  83  84 3.0e-10        0.48        0.71
-    ## Single_random_raters     ICC2 0.61 4.2  83  83 2.1e-10        0.48        0.71
-    ## Single_fixed_raters      ICC3 0.61 4.2  83  83 2.1e-10        0.49        0.71
-    ## Average_raters_absolute ICC1k 0.76 4.1  83  84 3.0e-10        0.65        0.83
-    ## Average_random_raters   ICC2k 0.76 4.2  83  83 2.1e-10        0.65        0.83
-    ## Average_fixed_raters    ICC3k 0.76 4.2  83  83 2.1e-10        0.66        0.83
+    ## Single_raters_absolute   ICC1 0.69 5.5 139 140 7.6e-22        0.61        0.76
+    ## Single_random_raters     ICC2 0.69 5.6 139 139 3.6e-22        0.61        0.76
+    ## Single_fixed_raters      ICC3 0.70 5.6 139 139 3.6e-22        0.62        0.76
+    ## Average_raters_absolute ICC1k 0.82 5.5 139 140 7.6e-22        0.76        0.86
+    ## Average_random_raters   ICC2k 0.82 5.6 139 139 3.6e-22        0.76        0.86
+    ## Average_fixed_raters    ICC3k 0.82 5.6 139 139 3.6e-22        0.76        0.87
     ## 
-    ##  Number of subjects = 84     Number of Judges =  2
+    ##  Number of subjects = 140     Number of Judges =  2
+    ## See the help file for a discussion of the other 4 McGraw and Wong estimates,
 
 ``` r
 #detachment
 fp_master %>%
-  filter(Episode < 4) %>% 
   dplyr::select(
     detach_r1,
     detach_r2
@@ -1178,14 +992,15 @@ fp_master %>%
     ## 
     ## Intraclass correlation coefficients 
     ##                          type  ICC   F df1 df2       p lower bound upper bound
-    ## Single_raters_absolute   ICC1 0.80 9.1  83  84 9.7e-21        0.73        0.86
-    ## Single_random_raters     ICC2 0.80 9.1  83  83 1.5e-20        0.73        0.86
-    ## Single_fixed_raters      ICC3 0.80 9.1  83  83 1.5e-20        0.73        0.86
-    ## Average_raters_absolute ICC1k 0.89 9.1  83  84 9.7e-21        0.84        0.92
-    ## Average_random_raters   ICC2k 0.89 9.1  83  83 1.5e-20        0.84        0.92
-    ## Average_fixed_raters    ICC3k 0.89 9.1  83  83 1.5e-20        0.84        0.92
+    ## Single_raters_absolute   ICC1 0.81 9.3 139 140 4.8e-34        0.75        0.85
+    ## Single_random_raters     ICC2 0.81 9.3 139 139 7.4e-34        0.75        0.85
+    ## Single_fixed_raters      ICC3 0.81 9.3 139 139 7.4e-34        0.75        0.85
+    ## Average_raters_absolute ICC1k 0.89 9.3 139 140 4.8e-34        0.86        0.92
+    ## Average_random_raters   ICC2k 0.89 9.3 139 139 7.4e-34        0.86        0.92
+    ## Average_fixed_raters    ICC3k 0.89 9.3 139 139 7.4e-34        0.86        0.92
     ## 
-    ##  Number of subjects = 84     Number of Judges =  2
+    ##  Number of subjects = 140     Number of Judges =  2
+    ## See the help file for a discussion of the other 4 McGraw and Wong estimates,
 
 ## Distributions of caregiving behaviors
 
@@ -1253,7 +1068,7 @@ da %>%
   facet_grid(key~episode_f, scales = "free")
 ```
 
-![](primary_analyses_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
+![](primary_analyses_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
 
 ``` r
 ggsave(
@@ -1316,7 +1131,7 @@ d_wf %>%
   facet_wrap(.~key, scales = "free")
 ```
 
-![](primary_analyses_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
+![](primary_analyses_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
 ``` r
 ggsave(
@@ -1548,6 +1363,8 @@ model_parameters(
 )
 ```
 
+    ## # Fixed Effects
+    ## 
     ## Parameter                     | Coefficient |   SE |        95% CI |     t |    df |     p
     ## ------------------------------------------------------------------------------------------
     ## (Intercept)                   |       -0.03 | 0.21 | [-0.44, 0.38] | -0.16 | 90.23 | 0.876
@@ -1561,6 +1378,8 @@ model_parameters(
 eta_squared(mlm_h_c)
 ```
 
+    ## # Effect Size for ANOVA (Type III)
+    ## 
     ## Parameter       | Eta2 (partial) |       90% CI
     ## -----------------------------------------------
     ## group           |           0.04 | [0.00, 0.13]
@@ -1630,6 +1449,8 @@ parameters(
 )
 ```
 
+    ## # Fixed Effects
+    ## 
     ## Parameter                       | Coefficient |   SE |        95% CI |     t |    df |     p
     ## --------------------------------------------------------------------------------------------
     ## (Intercept)                     |       -0.09 | 0.21 | [-0.49, 0.31] | -0.43 | 90.23 | 0.667
@@ -1701,6 +1522,8 @@ parameters(
 )
 ```
 
+    ## # Fixed Effects
+    ## 
     ## Parameter                       | Coefficient |   SE |         95% CI |     t |    df |     p
     ## ---------------------------------------------------------------------------------------------
     ## (Intercept)                     |       -0.08 | 0.21 | [-0.50,  0.35] | -0.35 | 90.23 | 0.727
@@ -1730,7 +1553,7 @@ da_summary <-
   ) %>% 
   group_by(group, episode_f) %>% 
   summarise(
-    n = n(),
+    n = sum(!is.na(intrus_FP)),
     Intrusiveness = mean(intrus_FP),
     intrus_sd = sd(intrus_FP),
     intrus_se = intrus_sd / sqrt(n),
@@ -1773,7 +1596,7 @@ da %>%
   )
 ```
 
-![](primary_analyses_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
+![](primary_analyses_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
 
 ``` r
 ggsave(
@@ -1834,7 +1657,7 @@ gg_summary_p +
   )
 ```
 
-![](primary_analyses_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
+![](primary_analyses_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
 
 ``` r
 ggsave(
@@ -1868,7 +1691,7 @@ intrus_diff %>%
   mutate(per = n / sum(n))
 ```
 
-    ## # A tibble: 6 x 4
+    ## # A tibble: 6 × 4
     ## # Groups:   group [3]
     ##   group   increased     n   per
     ##   <fct>   <lgl>     <int> <dbl>
@@ -1886,7 +1709,7 @@ intrus_diff %>%
   mutate(per = n / sum(n))
 ```
 
-    ## # A tibble: 6 x 4
+    ## # A tibble: 6 × 4
     ## # Groups:   group [3]
     ##   group   decreased     n   per
     ##   <fct>   <lgl>     <int> <dbl>
@@ -1942,7 +1765,7 @@ intrus_diff %>%
   )
 ```
 
-![](primary_analyses_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
+![](primary_analyses_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
 
 ``` r
 ggsave(
@@ -2048,6 +1871,8 @@ parameters(
 )
 ```
 
+    ## # Fixed Effects
+    ## 
     ## Parameter                     | Coefficient |   SE |        95% CI |     t |    df |     p
     ## ------------------------------------------------------------------------------------------
     ## (Intercept)                   |       -0.03 | 0.21 | [-0.45, 0.39] | -0.13 | 86.58 | 0.899
@@ -2063,6 +1888,8 @@ parameters(
 eta_squared(mlm_h_c_planned_wf)
 ```
 
+    ## # Effect Size for ANOVA (Type III)
+    ## 
     ## Parameter       | Eta2 (partial) |       90% CI
     ## -----------------------------------------------
     ## group           |           0.04 | [0.00, 0.13]
@@ -2137,6 +1964,8 @@ parameters(
 )
 ```
 
+    ## # Fixed Effects
+    ## 
     ## Parameter                     | Coefficient |   SE |        95% CI |     t |    df |     p
     ## ------------------------------------------------------------------------------------------
     ## (Intercept)                   |       -0.09 | 0.21 | [-0.49, 0.32] | -0.41 | 86.92 | 0.683
@@ -2214,6 +2043,8 @@ parameters(
 )
 ```
 
+    ## # Fixed Effects
+    ## 
     ## Parameter                       | Coefficient |   SE |         95% CI |     t |    df |     p
     ## ---------------------------------------------------------------------------------------------
     ## (Intercept)                     |       -0.08 | 0.22 | [-0.50,  0.35] | -0.35 | 87.04 | 0.724
@@ -2325,6 +2156,8 @@ model_parameters(
 )
 ```
 
+    ## # Fixed Effects
+    ## 
     ## Parameter                      | Coefficient |   SE |        95% CI |     t |     df |     p
     ## --------------------------------------------------------------------------------------------
     ## (Intercept)                    |        0.08 | 0.17 | [-0.26, 0.42] |  0.47 |  67.41 | 0.639
@@ -2338,9 +2171,11 @@ model_parameters(
 eta_squared(mlm_h_c_all)
 ```
 
+    ## # Effect Size for ANOVA (Type III)
+    ## 
     ## Parameter        | Eta2 (partial) |       90% CI
     ## ------------------------------------------------
-    ## group            |           0.07 | [0.00, 0.14]
+    ## group            |           0.07 | [0.00, 0.17]
     ## episode_pc       |           0.04 | [0.01, 0.08]
     ## group:episode_pc |           0.04 | [0.01, 0.08]
 
@@ -2405,6 +2240,8 @@ model_parameters(
 )
 ```
 
+    ## # Fixed Effects
+    ## 
     ## Parameter                        | Coefficient |   SE |        95% CI |     t |     df |     p
     ## ----------------------------------------------------------------------------------------------
     ## (Intercept)                      |       -0.25 | 0.17 | [-0.57, 0.08] | -1.46 |  67.41 | 0.148
@@ -2475,6 +2312,8 @@ parameters(
 )
 ```
 
+    ## # Fixed Effects
+    ## 
     ## Parameter                        | Coefficient |   SE |         95% CI |     t |     df |      p
     ## ------------------------------------------------------------------------------------------------
     ## (Intercept)                      |    7.93e-03 | 0.18 | [-0.34,  0.35] |  0.05 |  67.41 | 0.964 
@@ -2571,7 +2410,7 @@ gg_d_summary_p +
   ) 
 ```
 
-![](primary_analyses_files/figure-gfm/unnamed-chunk-42-1.png)<!-- -->
+![](primary_analyses_files/figure-gfm/unnamed-chunk-43-1.png)<!-- -->
 
 ``` r
 ggsave(
@@ -2639,7 +2478,7 @@ gg_d_summary_p_cog +
   )
 ```
 
-![](primary_analyses_files/figure-gfm/unnamed-chunk-43-1.png)<!-- -->
+![](primary_analyses_files/figure-gfm/unnamed-chunk-44-1.png)<!-- -->
 
 ``` r
 ggsave(
@@ -2793,6 +2632,8 @@ parameters(
 )
 ```
 
+    ## # Fixed Effects
+    ## 
     ## Parameter                     | Coefficient |   SE |         95% CI |     t |    df |     p
     ## -------------------------------------------------------------------------------------------
     ## (Intercept)                   |        0.37 | 0.20 | [-0.03,  0.77] |  1.81 | 92.64 | 0.074
@@ -2806,6 +2647,8 @@ parameters(
 eta_squared(mlm_posreg_c)
 ```
 
+    ## # Effect Size for ANOVA (Type III)
+    ## 
     ## Parameter       | Eta2 (partial) |       90% CI
     ## -----------------------------------------------
     ## group           |           0.12 | [0.01, 0.24]
@@ -2871,6 +2714,8 @@ parameters(
 )
 ```
 
+    ## # Fixed Effects
+    ## 
     ## Parameter                       | Coefficient |   SE |         95% CI |     t |    df |     p
     ## ---------------------------------------------------------------------------------------------
     ## (Intercept)                     |        0.06 | 0.20 | [-0.33,  0.45] |  0.29 | 92.64 | 0.770
@@ -2939,6 +2784,8 @@ parameters(
 )
 ```
 
+    ## # Fixed Effects
+    ## 
     ## Parameter                       | Coefficient |   SE |        95% CI |     t |    df |     p
     ## --------------------------------------------------------------------------------------------
     ## (Intercept)                     |       -0.20 | 0.21 | [-0.61, 0.21] | -0.97 | 92.64 | 0.334
@@ -2999,7 +2846,7 @@ gg_summary_p_posreg +
   )
 ```
 
-![](primary_analyses_files/figure-gfm/unnamed-chunk-49-1.png)<!-- -->
+![](primary_analyses_files/figure-gfm/unnamed-chunk-50-1.png)<!-- -->
 
 ``` r
 ggsave(
@@ -3084,6 +2931,8 @@ parameters(
 )
 ```
 
+    ## # Fixed Effects
+    ## 
     ## Parameter                     | Coefficient |   SE |         95% CI |     t |     df |      p
     ## ---------------------------------------------------------------------------------------------
     ## (Intercept)                   |        0.15 | 0.21 | [-0.26,  0.55] |  0.71 |  99.11 | 0.479 
@@ -3097,6 +2946,8 @@ parameters(
 eta_squared(mlm_stim_c)
 ```
 
+    ## # Effect Size for ANOVA (Type III)
+    ## 
     ## Parameter       | Eta2 (partial) |       90% CI
     ## -----------------------------------------------
     ## group           |           0.08 | [0.00, 0.19]
@@ -3162,6 +3013,8 @@ parameters(
 )
 ```
 
+    ## # Fixed Effects
+    ## 
     ## Parameter                       | Coefficient |   SE |         95% CI |     t |     df |      p
     ## -----------------------------------------------------------------------------------------------
     ## (Intercept)                     |        0.01 | 0.20 | [-0.38,  0.40] |  0.06 | 101.62 | 0.956 
@@ -3230,6 +3083,8 @@ parameters(
 )
 ```
 
+    ## # Fixed Effects
+    ## 
     ## Parameter                       | Coefficient |   SE |         95% CI |     t |     df |      p
     ## -----------------------------------------------------------------------------------------------
     ## (Intercept)                     |       -0.12 | 0.21 | [-0.52,  0.29] | -0.57 |  99.11 | 0.571 
@@ -3291,7 +3146,7 @@ gg_summary_p_stim +
   )
 ```
 
-![](primary_analyses_files/figure-gfm/unnamed-chunk-53-1.png)<!-- -->
+![](primary_analyses_files/figure-gfm/unnamed-chunk-54-1.png)<!-- -->
 
 ``` r
 ggsave(
@@ -3476,6 +3331,8 @@ parameters(
 )
 ```
 
+    ## # Fixed Effects
+    ## 
     ## Parameter                     | Coefficient |   SE |        95% CI |     t |    df |     p
     ## ------------------------------------------------------------------------------------------
     ## (Intercept)                   |        0.02 | 0.22 | [-0.40, 0.44] |  0.10 | 87.95 | 0.921
@@ -3491,6 +3348,8 @@ parameters(
 eta_squared(mlm_h_c_stim)
 ```
 
+    ## # Effect Size for ANOVA (Type III)
+    ## 
     ## Parameter       | Eta2 (partial) |       90% CI
     ## -----------------------------------------------
     ## group           |           0.06 | [0.00, 0.16]
@@ -3566,6 +3425,8 @@ parameters(
 )
 ```
 
+    ## # Fixed Effects
+    ## 
     ## Parameter                       | Coefficient |   SE |        95% CI |         t |    df |      p
     ## -------------------------------------------------------------------------------------------------
     ## (Intercept)                     |       -0.10 | 0.21 | [-0.52, 0.32] |     -0.46 | 90.97 | 0.644 
@@ -3644,6 +3505,8 @@ parameters(
 )
 ```
 
+    ## # Fixed Effects
+    ## 
     ## Parameter                       | Coefficient |   SE |         95% CI |        t |    df |      p
     ## -------------------------------------------------------------------------------------------------
     ## (Intercept)                     |       -0.10 | 0.22 | [-0.54,  0.34] |    -0.44 | 91.46 | 0.659 
@@ -3691,7 +3554,7 @@ da %>%
   )
 ```
 
-![](primary_analyses_files/figure-gfm/unnamed-chunk-61-1.png)<!-- -->
+![](primary_analyses_files/figure-gfm/unnamed-chunk-62-1.png)<!-- -->
 
 ``` r
 ggsave(
@@ -3785,6 +3648,8 @@ parameters(
 )
 ```
 
+    ## # Fixed Effects
+    ## 
     ## Parameter                     | Coefficient |   SE |        95% CI |         t |    df |      p
     ## -----------------------------------------------------------------------------------------------
     ## (Intercept)                   |       -0.06 | 0.22 | [-0.49, 0.37] |     -0.28 | 87.00 | 0.784 
@@ -3800,6 +3665,8 @@ parameters(
 eta_squared(mlm_h_c_posreg)
 ```
 
+    ## # Effect Size for ANOVA (Type III)
+    ## 
     ## Parameter       | Eta2 (partial) |       90% CI
     ## -----------------------------------------------
     ## group           |           0.04 | [0.00, 0.13]
@@ -3875,6 +3742,8 @@ parameters(
 )
 ```
 
+    ## # Fixed Effects
+    ## 
     ## Parameter                       | Coefficient |   SE |        95% CI |     t |    df |     p
     ## --------------------------------------------------------------------------------------------
     ## (Intercept)                     |       -0.09 | 0.21 | [-0.50, 0.32] | -0.43 | 91.51 | 0.668
@@ -3953,6 +3822,8 @@ parameters(
 )
 ```
 
+    ## # Fixed Effects
+    ## 
     ## Parameter                       | Coefficient |   SE |         95% CI |        t |    df |      p
     ## -------------------------------------------------------------------------------------------------
     ## (Intercept)                     |       -0.06 | 0.22 | [-0.49,  0.37] |    -0.28 | 88.28 | 0.783 
@@ -4000,7 +3871,7 @@ da %>%
   )
 ```
 
-![](primary_analyses_files/figure-gfm/unnamed-chunk-65-1.png)<!-- -->
+![](primary_analyses_files/figure-gfm/unnamed-chunk-66-1.png)<!-- -->
 
 ``` r
 ggsave(
@@ -4078,6 +3949,11 @@ var_label(d_share) <-
   )
     
 metadata(d_share)$name <- "Analysed data for \"Teaching or Learning from Baby: Inducing Explicit Parenting Goals Influences Caregiver Intrusiveness\" (King et al. 2021)"
+
+# rio::export(
+#   de,
+#   "~/Desktop/BABIES/hair_cortisol/teach_learn_analyzed_data_20210902.rds"
+# )
 
 #write_csv(d_share, "~/Desktop/BABIES/teach_learn/teach_learn_analyzed_data_20210902.csv")
 ```
